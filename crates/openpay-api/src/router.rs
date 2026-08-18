@@ -1,11 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::DefaultBodyLimit;
-use axum::http::{HeaderName, HeaderValue};
-use axum::middleware;
-use axum::routing::{get, post};
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
+use axum::http::{HeaderName, HeaderValue, StatusCode};
+use axum::middleware;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -47,24 +48,31 @@ async fn health() -> axum::Json<serde_json::Value> {
     }))
 }
 
-#[utoipa::path(get, path = "/readyz", responses((status = 200)))]
+#[utoipa::path(get, path = "/readyz", responses((status = 200), (status = 503)))]
 async fn ready(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
-) -> axum::Json<serde_json::Value> {
+) -> impl IntoResponse {
     let db_ok = sqlx::query("SELECT 1")
         .execute(&state.store.pool)
         .await
         .is_ok();
-    axum::Json(serde_json::json!({
-        "status": if db_ok { "ok" } else { "degraded" },
+    let body = axum::Json(serde_json::json!({
+        "status": if db_ok { "ok" } else { "unavailable" },
         "database": db_ok
-    }))
+    }));
+    if db_ok {
+        (StatusCode::OK, body).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, body).into_response()
+    }
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
     let cors = if state.config.cors_allow_origins.is_empty() {
         CorsLayer::new()
-            .allow_origin(AllowOrigin::exact(HeaderValue::from_static("http://localhost:3002")))
+            .allow_origin(AllowOrigin::exact(HeaderValue::from_static(
+                "http://localhost:3002",
+            )))
             .allow_headers(tower_http::cors::Any)
             .allow_methods(tower_http::cors::Any)
     } else {
@@ -87,21 +95,48 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/payment-requests",
             post(crate::merchant::create_payment).get(crate::merchant::list_payments),
         )
-        .route("/payment-requests/{payment_id}", get(crate::merchant::get_payment))
-        .route("/payment-requests/{payment_id}/cancel", post(crate::merchant::cancel_payment))
-        .route("/payment-requests/{payment_id}/refunds", post(crate::merchant::refund_payment))
-        .route("/payment-requests/{payment_id}/attempts", get(crate::merchant::list_attempts))
-        .route("/payment-requests/{payment_id}/events", get(crate::merchant::list_events));
+        .route(
+            "/payment-requests/{payment_id}",
+            get(crate::merchant::get_payment),
+        )
+        .route(
+            "/payment-requests/{payment_id}/cancel",
+            post(crate::merchant::cancel_payment),
+        )
+        .route(
+            "/payment-requests/{payment_id}/refunds",
+            post(crate::merchant::refund_payment),
+        )
+        .route(
+            "/payment-requests/{payment_id}/attempts",
+            get(crate::merchant::list_attempts),
+        )
+        .route(
+            "/payment-requests/{payment_id}/events",
+            get(crate::merchant::list_events),
+        );
 
     let admin = Router::new()
         .route("/overview", get(crate::admin::overview))
         .route("/connectors", get(crate::admin::connectors))
         .route("/settings", get(crate::admin::settings))
         .route("/api-keys", get(crate::admin::list_api_keys))
-        .route("/webhook-endpoints", get(crate::admin::list_webhook_endpoints))
-        .route("/webhook-deliveries", get(crate::admin::list_webhook_deliveries))
-        .route("/routing-policies", get(crate::admin::list_routing_policies))
-        .route("/payments/{payment_id}/reconcile", post(crate::admin::reconcile_payment_admin))
+        .route(
+            "/webhook-endpoints",
+            get(crate::admin::list_webhook_endpoints),
+        )
+        .route(
+            "/webhook-deliveries",
+            get(crate::admin::list_webhook_deliveries),
+        )
+        .route(
+            "/routing-policies",
+            get(crate::admin::list_routing_policies),
+        )
+        .route(
+            "/payments/{payment_id}/reconcile",
+            post(crate::admin::reconcile_payment_admin),
+        )
         .route(
             "/attempts/{attempt_id}/resolve",
             post(crate::admin::resolve_manual_attempt_admin),
@@ -109,7 +144,10 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     let public = Router::new()
         .route("/payments/{payment_id}", get(crate::public::public_get))
-        .route("/payments/{payment_id}/authorize", post(crate::public::public_authorize))
+        .route(
+            "/payments/{payment_id}/authorize",
+            post(crate::public::public_authorize),
+        )
         .route(
             "/payments/{payment_id}/simulate-duplicate",
             post(crate::public::simulate_duplicate_callback),
@@ -132,11 +170,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(api)
         .merge(swagger)
         .layer(DefaultBodyLimit::max(64 * 1024))
-        .layer(TimeoutLayer::new(Duration::from_secs(30)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(middleware::from_fn(track_http_metrics))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .layer(SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid))
+        .layer(SetRequestIdLayer::new(
+            x_request_id.clone(),
+            MakeRequestUuid,
+        ))
         .layer(PropagateRequestIdLayer::new(x_request_id))
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::header::HeaderName::from_static("x-content-type-options"),

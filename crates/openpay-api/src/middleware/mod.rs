@@ -1,11 +1,11 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use redis::AsyncCommands;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing::warn;
 
 use crate::state::AppState;
@@ -41,8 +41,10 @@ pub async fn track_http_metrics(request: Request<Body>, next: Next) -> Response 
     let started = std::time::Instant::now();
     let response = next.run(request).await;
     let status = response.status().as_u16();
-    metrics::counter!("openpay_http_requests_total", "method" => method.to_string(), "path" => path, "status" => status.to_string()).increment(1);
-    metrics::histogram!("openpay_http_request_duration_seconds", "path" => path).record(started.elapsed().as_secs_f64());
+    let path_label = path.clone();
+    metrics::counter!("openpay_http_requests_total", "method" => method.to_string(), "path" => path_label, "status" => status.to_string()).increment(1);
+    metrics::histogram!("openpay_http_request_duration_seconds", "path" => path)
+        .record(started.elapsed().as_secs_f64());
     if status >= 500 {
         warn!(%status, "server error");
     }

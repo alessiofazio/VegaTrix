@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::Json;
 use serde_json::json;
 use time::OffsetDateTime;
 use validator::Validate;
@@ -12,7 +12,7 @@ use openpay_domain::{CreatePaymentCommand, IdempotencyKey, MerchantId, PaymentId
 use openpay_persistence::seed::DEMO_MERCHANT;
 
 use crate::auth::AuthContext;
-use crate::dto::{parse_methods, CreatePaymentBody, PaymentCreatedResponse, PaymentView};
+use crate::dto::{CreatePaymentBody, PaymentCreatedResponse, PaymentView, parse_methods};
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -20,7 +20,14 @@ fn merchant_from_auth(auth: &AuthContext) -> Result<MerchantId, ApiError> {
     auth.merchant_id
         .or_else(|| Some(MerchantId::from_uuid(DEMO_MERCHANT)))
         .filter(|_| true)
-        .ok_or_else(|| ApiError::new(StatusCode::FORBIDDEN, "forbidden", "Forbidden", "merchant scope required"))
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Forbidden",
+                "merchant scope required",
+            )
+        })
 }
 
 #[utoipa::path(
@@ -36,7 +43,12 @@ pub async fn create_payment(
     Json(body): Json<CreatePaymentBody>,
 ) -> Result<(StatusCode, Json<PaymentCreatedResponse>), ApiError> {
     body.validate().map_err(|e| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "validation",
+            "Validation failed",
+            e.to_string(),
+        )
     })?;
     let idem = headers
         .get("Idempotency-Key")
@@ -70,13 +82,24 @@ pub async fn create_payment(
             meta
         },
         idempotency_key: IdempotencyKey::new(idem).map_err(|e| {
-            ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
         })?,
         routing_policy_id: None,
     };
     let created = state
         .payments
-        .create_payment(cmd, headers.get("x-request-id").and_then(|v| v.to_str().ok()).map(str::to_string))
+        .create_payment(
+            cmd,
+            headers
+                .get("x-request-id")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string),
+        )
         .await
         .map_err(ApiError::from)?;
     let status = if created.replayed {
@@ -107,9 +130,16 @@ pub async fn get_payment(
     auth: AuthContext,
     Path(payment_id): Path<String>,
 ) -> Result<Json<PaymentView>, ApiError> {
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
     let payment = state
         .payments
         .get_payment(auth.tenant_id, id)
@@ -117,7 +147,12 @@ pub async fn get_payment(
         .map_err(ApiError::from)?;
     if let Some(mid) = auth.merchant_id {
         payment.belongs_to(auth.tenant_id, mid).map_err(|e| {
-            ApiError::new(StatusCode::NOT_FOUND, "not-found", "Not found", e.to_string())
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not-found",
+                "Not found",
+                e.to_string(),
+            )
         })?;
     }
     Ok(Json(PaymentView::from(&payment)))
@@ -128,9 +163,16 @@ pub async fn cancel_payment(
     auth: AuthContext,
     Path(payment_id): Path<String>,
 ) -> Result<Json<PaymentView>, ApiError> {
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
     let payment = state
         .payments
         .cancel_payment(auth.tenant_id, id, &auth.actor_id)
@@ -144,9 +186,16 @@ pub async fn refund_payment(
     auth: AuthContext,
     Path(payment_id): Path<String>,
 ) -> Result<Json<PaymentView>, ApiError> {
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
     let payment = state
         .payments
         .refund_payment(auth.tenant_id, id, &auth.actor_id)
@@ -160,25 +209,35 @@ pub async fn list_attempts(
     auth: AuthContext,
     Path(payment_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
-    let attempts = openpay_application::PaymentRepository::list_attempts(&state.store, auth.tenant_id, id)
-        .await
-        .map_err(openpay_application::ApplicationError::from)
-        .map_err(ApiError::from)?;
-    Ok(Json(json!(attempts
-        .iter()
-        .map(|a| json!({
-            "id": a.id.as_prefixed(),
-            "connector_key": a.connector_key,
-            "rail_type": a.rail_type,
-            "status": a.status.as_str(),
-            "provider_reference": a.provider_reference,
-            "failure_code": a.failure_code,
-            "created_at": a.created_at
-        }))
-        .collect::<Vec<_>>())))
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
+    let attempts =
+        openpay_application::PaymentRepository::list_attempts(&state.store, auth.tenant_id, id)
+            .await
+            .map_err(openpay_application::ApplicationError::from)
+            .map_err(ApiError::from)?;
+    Ok(Json(json!(
+        attempts
+            .iter()
+            .map(|a| json!({
+                "id": a.id.as_prefixed(),
+                "connector_key": a.connector_key,
+                "rail_type": a.rail_type,
+                "status": a.status.as_str(),
+                "provider_reference": a.provider_reference,
+                "failure_code": a.failure_code,
+                "created_at": a.created_at
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn list_events(
@@ -186,23 +245,33 @@ pub async fn list_events(
     auth: AuthContext,
     Path(payment_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
-    let events = openpay_application::AuditRepository::list_for_payment(&state.store, auth.tenant_id, id)
-        .await
-        .map_err(openpay_application::ApplicationError::from)
-        .map_err(ApiError::from)?;
-    Ok(Json(json!(events
-        .iter()
-        .map(|e| json!({
-            "id": e.id.as_prefixed(),
-            "event_type": e.event_type,
-            "actor_type": e.actor_type,
-            "occurred_at": e.occurred_at,
-            "metadata_redacted": e.metadata_redacted
-        }))
-        .collect::<Vec<_>>())))
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
+    let events =
+        openpay_application::AuditRepository::list_for_payment(&state.store, auth.tenant_id, id)
+            .await
+            .map_err(openpay_application::ApplicationError::from)
+            .map_err(ApiError::from)?;
+    Ok(Json(json!(
+        events
+            .iter()
+            .map(|e| json!({
+                "id": e.id.as_prefixed(),
+                "event_type": e.event_type,
+                "actor_type": e.actor_type,
+                "occurred_at": e.occurred_at,
+                "metadata_redacted": e.metadata_redacted
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn list_payments(

@@ -69,7 +69,9 @@ impl From<&PaymentRequest> for PaymentView {
     }
 }
 
-pub fn parse_methods(raw: &Option<Vec<String>>) -> Result<Vec<PaymentMethod>, crate::error::ApiError> {
+pub fn parse_methods(
+    raw: &Option<Vec<String>>,
+) -> Result<Vec<PaymentMethod>, crate::error::ApiError> {
     let Some(items) = raw else {
         return Ok(vec![PaymentMethod::AccountToAccount]);
     };
@@ -86,7 +88,7 @@ pub fn parse_methods(raw: &Option<Vec<String>>) -> Result<Vec<PaymentMethod>, cr
                     "validation",
                     "Validation failed",
                     format!("unknown method {other}"),
-                ))
+                ));
             }
         });
     }

@@ -6,16 +6,8 @@ use openpay_persistence::PgStore;
 
 use crate::connectors::ConnectorRuntime;
 
-pub type Payments = PaymentService<
-    PgStore,
-    PgStore,
-    PgStore,
-    PgStore,
-    PgStore,
-    PgStore,
-    PgStore,
-    SystemClock,
->;
+pub type Payments =
+    PaymentService<PgStore, PgStore, PgStore, PgStore, PgStore, PgStore, PgStore, SystemClock>;
 
 pub struct AppState {
     pub config: AppConfig,

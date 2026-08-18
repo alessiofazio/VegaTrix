@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 use serde_json::json;
 use time::OffsetDateTime;
 
-use openpay_application::{authorize_payment, replay_connector_callback, verify_qr_token, PayerDecision};
+use openpay_application::{
+    PayerDecision, authorize_payment, replay_connector_callback, verify_qr_token,
+};
 use openpay_domain::{PaymentId, TenantId};
 
 use crate::error::ApiError;
@@ -125,7 +127,10 @@ pub async fn simulate_duplicate_callback(
     // Resolve tenant by loading payment with demo tenant first, then without strict tenant if needed
     let tenant_id = match state
         .payments
-        .get_payment(TenantId::from_uuid(openpay_persistence::seed::DEMO_TENANT), id)
+        .get_payment(
+            TenantId::from_uuid(openpay_persistence::seed::DEMO_TENANT),
+            id,
+        )
         .await
     {
         Ok(p) => p.tenant_id,
@@ -135,14 +140,10 @@ pub async fn simulate_duplicate_callback(
         }
     };
 
-    let outcome = replay_connector_callback(
-        &state.payments,
-        &state.connectors.registry,
-        tenant_id,
-        id,
-    )
-    .await
-    .map_err(ApiError::from)?;
+    let outcome =
+        replay_connector_callback(&state.payments, &state.connectors.registry, tenant_id, id)
+            .await
+            .map_err(ApiError::from)?;
 
     Ok(Json(json!({
         "payment_id": outcome.payment.id.as_prefixed(),
@@ -174,7 +175,10 @@ pub async fn qr_png(
         .get_payment(verified.tenant_id, verified.payment_id)
         .await
         .map_err(ApiError::from)?;
-    let presented = state.payments.present(&payment, true).map_err(ApiError::from)?;
+    let presented = state
+        .payments
+        .present(&payment, true)
+        .map_err(ApiError::from)?;
     let svg = presented.qr_svg.into_bytes();
     let mut response = axum::response::Response::new(svg.into());
     response.headers_mut().insert(

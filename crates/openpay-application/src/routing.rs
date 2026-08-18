@@ -23,7 +23,11 @@ pub fn evaluate_policy(
     for rule in &rules {
         if rule_matches(&rule.when, context, connectors) {
             if connectors.iter().any(|c| c.key == rule.select && c.enabled) {
-                ranked.push((rule.priority, rule.select.clone(), Some(format!("rule:{}", rule.select))));
+                ranked.push((
+                    rule.priority,
+                    rule.select.clone(),
+                    Some(format!("rule:{}", rule.select)),
+                ));
             }
         }
     }
@@ -40,7 +44,11 @@ pub fn evaluate_policy(
             })
             .max_by_key(|c| c.priority)
         {
-            ranked.push((best.priority, best.key.clone(), Some("default_priority".into())));
+            ranked.push((
+                best.priority,
+                best.key.clone(),
+                Some("default_priority".into()),
+            ));
         }
     }
 

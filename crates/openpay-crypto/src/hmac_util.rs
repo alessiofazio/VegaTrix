@@ -1,4 +1,4 @@
-use hmac::{Hmac, KeyInit, Mac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use thiserror::Error;
 
@@ -16,6 +16,12 @@ pub enum CryptoError {
     Malformed,
     #[error("hashing failed")]
     Hashing,
+    #[error("encryption failed")]
+    Encryption,
+    #[error("decryption failed")]
+    Decryption,
+    #[error("invalid master key")]
+    InvalidMasterKey,
 }
 
 pub type HmacSha256 = Hmac<Sha256>;
@@ -30,7 +36,11 @@ pub fn hmac_sha256_hex(secret: &[u8], message: &[u8]) -> Result<String, CryptoEr
     Ok(hex::encode(hmac_sha256(secret, message)?))
 }
 
-pub fn verify_hmac_sha256(secret: &[u8], message: &[u8], expected_hex: &str) -> Result<(), CryptoError> {
+pub fn verify_hmac_sha256(
+    secret: &[u8],
+    message: &[u8],
+    expected_hex: &str,
+) -> Result<(), CryptoError> {
     let expected = hex::decode(expected_hex.trim()).map_err(|_| CryptoError::Malformed)?;
     let actual = hmac_sha256(secret, message)?;
     if actual.len() != expected.len() {

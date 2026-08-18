@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde_json::json;
 
-use openpay_application::{reconcile_payment, PaymentRepository};
+use openpay_application::{PaymentRepository, reconcile_payment};
 use openpay_domain::{AttemptId, PaymentId};
 
 use crate::auth::AuthContext;
@@ -17,10 +17,11 @@ pub async fn overview(
     auth: AuthContext,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_admin(&auth)?;
-    let merchants = openpay_application::MerchantRepository::list_merchants(&state.store, auth.tenant_id)
-        .await
-        .map_err(openpay_application::ApplicationError::from)
-        .map_err(ApiError::from)?;
+    let merchants =
+        openpay_application::MerchantRepository::list_merchants(&state.store, auth.tenant_id)
+            .await
+            .map_err(openpay_application::ApplicationError::from)
+            .map_err(ApiError::from)?;
     let payments = if let Some(m) = merchants.first() {
         PaymentRepository::list_by_merchant(&state.store, auth.tenant_id, m.id, 100)
             .await
@@ -96,13 +97,17 @@ pub async fn list_api_keys(
         .await
         .map_err(openpay_application::ApplicationError::from)
         .map_err(ApiError::from)?;
-    Ok(Json(json!(keys.iter().map(|k| json!({
-        "id": k.id,
-        "name": k.name,
-        "fingerprint": k.fingerprint,
-        "revoked": k.revoked,
-        "scopes": k.scopes
-    })).collect::<Vec<_>>())))
+    Ok(Json(json!(
+        keys.iter()
+            .map(|k| json!({
+                "id": k.id,
+                "name": k.name,
+                "fingerprint": k.fingerprint,
+                "revoked": k.revoked,
+                "scopes": k.scopes
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn list_webhook_endpoints(
@@ -116,13 +121,17 @@ pub async fn list_webhook_endpoints(
         .await
         .map_err(openpay_application::ApplicationError::from)
         .map_err(ApiError::from)?;
-    Ok(Json(json!(rows.iter().map(|e| json!({
-        "id": e.id.as_prefixed(),
-        "url": e.url,
-        "status": format!("{:?}", e.status).to_lowercase(),
-        "failure_count": e.failure_count,
-        "event_types": e.event_types
-    })).collect::<Vec<_>>())))
+    Ok(Json(json!(
+        rows.iter()
+            .map(|e| json!({
+                "id": e.id.as_prefixed(),
+                "url": e.url,
+                "status": format!("{:?}", e.status).to_lowercase(),
+                "failure_count": e.failure_count,
+                "event_types": e.event_types
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn list_webhook_deliveries(
@@ -136,14 +145,18 @@ pub async fn list_webhook_deliveries(
         .await
         .map_err(openpay_application::ApplicationError::from)
         .map_err(ApiError::from)?;
-    Ok(Json(json!(rows.iter().map(|d| json!({
-        "id": d.id.as_prefixed(),
-        "event_id": d.event_id.as_prefixed(),
-        "status": format!("{:?}", d.status).to_lowercase(),
-        "attempt_count": d.attempt_count,
-        "response_code": d.response_code,
-        "last_error_safe": d.last_error_safe
-    })).collect::<Vec<_>>())))
+    Ok(Json(json!(
+        rows.iter()
+            .map(|d| json!({
+                "id": d.id.as_prefixed(),
+                "event_id": d.event_id.as_prefixed(),
+                "status": format!("{:?}", d.status).to_lowercase(),
+                "attempt_count": d.attempt_count,
+                "response_code": d.response_code,
+                "last_error_safe": d.last_error_safe
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn list_routing_policies(
@@ -157,13 +170,17 @@ pub async fn list_routing_policies(
         .await
         .map_err(openpay_application::ApplicationError::from)
         .map_err(ApiError::from)?;
-    Ok(Json(json!(rows.iter().map(|p| json!({
-        "id": p.id.as_prefixed(),
-        "name": p.name,
-        "status": format!("{:?}", p.status).to_lowercase(),
-        "rules_json": p.rules_json,
-        "fallback_policy": p.fallback_policy
-    })).collect::<Vec<_>>())))
+    Ok(Json(json!(
+        rows.iter()
+            .map(|p| json!({
+                "id": p.id.as_prefixed(),
+                "name": p.name,
+                "status": format!("{:?}", p.status).to_lowercase(),
+                "rules_json": p.rules_json,
+                "fallback_policy": p.fallback_policy
+            }))
+            .collect::<Vec<_>>()
+    )))
 }
 
 pub async fn reconcile_payment_admin(
@@ -172,9 +189,16 @@ pub async fn reconcile_payment_admin(
     Path(payment_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_admin(&auth)?;
-    let id: PaymentId = payment_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(axum::http::StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
+    let id: PaymentId = payment_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
     let updated = reconcile_payment(
         &state.payments,
         &state.connectors.registry,
@@ -196,9 +220,16 @@ pub async fn resolve_manual_attempt_admin(
     Json(body): Json<ResolveBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_admin(&auth)?;
-    let attempt_id: AttemptId = attempt_id.parse().map_err(|e: openpay_domain::DomainError| {
-        ApiError::new(axum::http::StatusCode::BAD_REQUEST, "validation", "Validation failed", e.to_string())
-    })?;
+    let attempt_id: AttemptId = attempt_id
+        .parse()
+        .map_err(|e: openpay_domain::DomainError| {
+            ApiError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                e.to_string(),
+            )
+        })?;
     let manual = state.connectors.manual.as_ref().ok_or_else(|| {
         ApiError::new(
             axum::http::StatusCode::UNPROCESSABLE_ENTITY,
@@ -219,14 +250,17 @@ pub async fn resolve_manual_attempt_admin(
             "attempt has no provider_reference",
         )
     })?;
-    manual.resolve(&provider_ref, body.approve).await.map_err(|e| {
-        ApiError::new(
-            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-            "connector",
-            "Resolve failed",
-            e.to_string(),
-        )
-    })?;
+    manual
+        .resolve(&provider_ref, body.approve)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "connector",
+                "Resolve failed",
+                e.to_string(),
+            )
+        })?;
     let payment = state
         .payments
         .get_payment(attempt.tenant_id, attempt.payment_request_id)
@@ -237,7 +271,11 @@ pub async fn resolve_manual_attempt_admin(
     } else {
         openpay_domain::PaymentStatus::Failed
     };
-    let event = if body.approve { "payment.settled" } else { "payment.failed" };
+    let event = if body.approve {
+        "payment.settled"
+    } else {
+        "payment.failed"
+    };
     let updated = state
         .payments
         .apply_status(&payment, next, "admin", &auth.actor_id, event)

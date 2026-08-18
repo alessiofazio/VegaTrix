@@ -48,10 +48,7 @@ impl PaymentStatus {
     pub fn is_terminal(self) -> bool {
         matches!(
             self,
-            Self::Failed
-                | Self::Cancelled
-                | Self::Expired
-                | Self::Refunded
+            Self::Failed | Self::Cancelled | Self::Expired | Self::Refunded
         )
     }
 
@@ -181,12 +178,20 @@ mod tests {
 
     #[test]
     fn created_to_pending_ok() {
-        assert!(PaymentStatus::Created.transition(PaymentStatus::Pending).is_ok());
+        assert!(
+            PaymentStatus::Created
+                .transition(PaymentStatus::Pending)
+                .is_ok()
+        );
     }
 
     #[test]
     fn settled_to_pending_rejected() {
-        assert!(PaymentStatus::Settled.transition(PaymentStatus::Pending).is_err());
+        assert!(
+            PaymentStatus::Settled
+                .transition(PaymentStatus::Pending)
+                .is_err()
+        );
     }
 
     #[test]
@@ -200,8 +205,17 @@ mod tests {
     #[test]
     fn same_status_is_idempotent() {
         assert_eq!(
-            PaymentStatus::Settled.transition(PaymentStatus::Settled).unwrap(),
+            PaymentStatus::Settled
+                .transition(PaymentStatus::Settled)
+                .unwrap(),
             PaymentStatus::Settled
         );
+    }
+
+    #[test]
+    fn pending_may_expire_processing_may_not() {
+        assert!(PaymentStatus::Pending.can_transition_to(PaymentStatus::Expired));
+        assert!(PaymentStatus::RequiresAction.can_transition_to(PaymentStatus::Expired));
+        assert!(!PaymentStatus::Processing.can_transition_to(PaymentStatus::Expired));
     }
 }

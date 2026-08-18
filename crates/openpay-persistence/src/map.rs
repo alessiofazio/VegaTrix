@@ -1,4 +1,6 @@
-use openpay_application::{ApiKeyRecord, AuthUser, ConnectorSnapshot, OutboxRecord, RepositoryError};
+use openpay_application::{
+    ApiKeyRecord, AuthUser, ConnectorSnapshot, OutboxRecord, RepositoryError,
+};
 use openpay_domain::{
     AmountMinor, AttemptId, AttemptStatus, AuditEvent, ConnectorHealth, ConnectorId, Currency,
     DeliveryStatus, IdempotencyKey, Merchant, MerchantId, MerchantOrderId, MerchantStatus,
@@ -54,7 +56,8 @@ pub struct MerchantRow {
 impl TryFrom<MerchantRow> for Merchant {
     type Error = RepositoryError;
     fn try_from(row: MerchantRow) -> Result<Self, Self::Error> {
-        let prefs: Vec<String> = serde_json::from_value(row.currency_preferences).unwrap_or_default();
+        let prefs: Vec<String> =
+            serde_json::from_value(row.currency_preferences).unwrap_or_default();
         Ok(Self {
             id: MerchantId::from_uuid(row.id),
             tenant_id: TenantId::from_uuid(row.tenant_id),
@@ -295,7 +298,10 @@ impl TryFrom<DeliveryRow> for WebhookDelivery {
         Ok(Self {
             id: openpay_domain::WebhookDeliveryId::from_uuid(row.id),
             webhook_endpoint_id: WebhookEndpointId::from_uuid(row.webhook_endpoint_id),
-            event_id: row.event_id.parse().unwrap_or_else(|_| openpay_domain::EventId::new()),
+            event_id: row
+                .event_id
+                .parse()
+                .unwrap_or_else(|_| openpay_domain::EventId::new()),
             payload_version: row.payload_version,
             status: parse_delivery(&row.status),
             attempt_count: row.attempt_count,

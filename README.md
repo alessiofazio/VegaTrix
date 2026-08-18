@@ -92,6 +92,20 @@ cargo run -p openpay-cli -- seed
 
 PostgreSQL and Redis must be running. Configuration is validated at boot from environment variables (see `.env.example`).
 
+## Production
+
+Demo `docker compose up` stays on `APP_ENV=development` (mock connector, auto-seed, HTTP localhost). For a prod-like stack:
+
+```bash
+cp .env.production.example .env.production
+# fill real secrets, https:// URLs, webhook host allowlist
+docker compose -f docker-compose.prod.yml --env-file .env.production up --build
+```
+
+Production boot **refuses** placeholder secrets (`replace_me`), `FEATURE_CONNECTOR_MOCK=true`, empty `WEBHOOK_URL_ALLOWLIST`, `http://` public URLs, and `--seed` / auto-seed. Terminate TLS at a reverse proxy. Backup Postgres with `infra/backup/pg_dump.ps1` or `infra/backup/pg_dump.sh`. Prometheus rules: `infra/prometheus/alerts.yml` (scrape `METRICS_BIND_ADDR` only when `TELEMETRY_OPT_IN=true`).
+
+This is still **not** a live PSP: no Stripe/Nexi connectors, no PCI/PSD2 claim, license still draft.
+
 ## Editions
 
 | Edition | Intent |

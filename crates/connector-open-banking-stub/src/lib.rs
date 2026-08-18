@@ -6,9 +6,10 @@
 
 use async_trait::async_trait;
 use openpay_connectors::{
-    CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError, CreatePaymentAttemptInput,
-    CreatePaymentAttemptOutput, GetPaymentAttemptInput, NormalizedAttemptStatus, PaymentConnector,
-    RefundPaymentAttemptInput, RefundPaymentAttemptOutput,
+    CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError,
+    CreatePaymentAttemptInput, CreatePaymentAttemptOutput, GetPaymentAttemptInput,
+    NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput,
+    RefundPaymentAttemptOutput,
 };
 use openpay_domain::{ConnectorCapabilities, ConnectorHealth, PaymentMethod};
 

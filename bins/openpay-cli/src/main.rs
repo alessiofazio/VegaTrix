@@ -28,6 +28,9 @@ async fn main() -> anyhow::Result<()> {
             println!("migrations applied");
         }
         Commands::Seed => {
+            config
+                .assert_seed_allowed()
+                .context("refusing seed in production")?;
             migrate(&pool).await?;
             let webhook = std::env::var("DEMO_MERCHANT_URL")
                 .unwrap_or_else(|_| "http://demo-merchant:3002/webhooks/openpay".into());
@@ -38,10 +41,7 @@ async fn main() -> anyhow::Result<()> {
                 openpay_persistence::seed::DEMO_ADMIN_EMAIL,
                 openpay_persistence::seed::DEMO_ADMIN_PASSWORD
             );
-            println!(
-                "api key: {}",
-                openpay_persistence::seed::DEMO_API_KEY_PLAIN
-            );
+            println!("api key: {}", openpay_persistence::seed::DEMO_API_KEY_PLAIN);
         }
     }
     Ok(())

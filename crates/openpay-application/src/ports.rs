@@ -5,8 +5,8 @@ use time::OffsetDateTime;
 
 use openpay_domain::{
     AttemptId, AuditEvent, ConnectorHealth, ConnectorId, Merchant, MerchantId, PaymentAttempt,
-    PaymentId, PaymentRequest, PaymentStatus, RoutingDecision, Tenant, TenantId,
-    TransitionPaymentCommand, WebhookDelivery, WebhookEndpoint,
+    PaymentId, PaymentRequest, RoutingDecision, Tenant, TenantId, TransitionPaymentCommand,
+    WebhookDelivery, WebhookEndpoint,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -67,7 +67,10 @@ pub trait PaymentRepository: Send + Sync {
         outbox: Option<OutboxRecord>,
     ) -> Result<PaymentRequest, RepositoryError>;
 
-    async fn insert_attempt(&self, attempt: PaymentAttempt) -> Result<PaymentAttempt, RepositoryError>;
+    async fn insert_attempt(
+        &self,
+        attempt: PaymentAttempt,
+    ) -> Result<PaymentAttempt, RepositoryError>;
 
     async fn list_attempts(
         &self,
@@ -81,12 +84,21 @@ pub trait PaymentRepository: Send + Sync {
         attempt_id: AttemptId,
     ) -> Result<PaymentAttempt, RepositoryError>;
 
-    async fn update_attempt(&self, attempt: PaymentAttempt) -> Result<PaymentAttempt, RepositoryError>;
+    async fn update_attempt(
+        &self,
+        attempt: PaymentAttempt,
+    ) -> Result<PaymentAttempt, RepositoryError>;
 
     async fn list_reconcilable_payments(
         &self,
         limit: i64,
     ) -> Result<Vec<(TenantId, PaymentId)>, RepositoryError>;
+
+    async fn list_expirable_payments(
+        &self,
+        now: OffsetDateTime,
+        limit: i64,
+    ) -> Result<Vec<PaymentRequest>, RepositoryError>;
 }
 
 #[async_trait]
@@ -140,7 +152,10 @@ pub trait WebhookRepository: Send + Sync {
 
     async fn insert_delivery(&self, delivery: WebhookDelivery) -> Result<(), RepositoryError>;
 
-    async fn list_pending_deliveries(&self, limit: i64) -> Result<Vec<WebhookDelivery>, RepositoryError>;
+    async fn list_pending_deliveries(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<WebhookDelivery>, RepositoryError>;
 
     async fn update_delivery(&self, delivery: WebhookDelivery) -> Result<(), RepositoryError>;
 
@@ -175,7 +190,10 @@ pub struct ApiKeyRecord {
 
 #[async_trait]
 pub trait ApiKeyRepository: Send + Sync {
-    async fn find_by_fingerprint(&self, fingerprint: &str) -> Result<Option<ApiKeyRecord>, RepositoryError>;
+    async fn find_by_fingerprint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<ApiKeyRecord>, RepositoryError>;
     async fn list_for_merchant(
         &self,
         tenant_id: TenantId,
@@ -203,7 +221,10 @@ pub struct ConnectorSnapshot {
 
 #[async_trait]
 pub trait ConnectorCatalog: Send + Sync {
-    async fn list_enabled(&self, tenant_id: TenantId) -> Result<Vec<ConnectorSnapshot>, RepositoryError>;
+    async fn list_enabled(
+        &self,
+        tenant_id: TenantId,
+    ) -> Result<Vec<ConnectorSnapshot>, RepositoryError>;
 
     async fn connector_id_by_key(
         &self,

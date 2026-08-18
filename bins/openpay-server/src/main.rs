@@ -6,11 +6,11 @@ use clap::Parser;
 use connector_manual_test::ManualTestConnector;
 use connector_mock_instant::MockInstantConnector;
 use connector_open_banking_stub::OpenBankingStubConnector;
-use openpay_api::{connectors::ConnectorRuntime, router, AppState};
+use openpay_api::{AppState, connectors::ConnectorRuntime, router};
 use openpay_config::AppConfig;
 use openpay_connectors::ConnectorRegistry;
 use openpay_observability::init_tracing;
-use openpay_persistence::{connect, migrate, seed::seed_demo, PgStore};
+use openpay_persistence::{PgStore, connect, migrate, seed::seed_demo};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -22,6 +22,11 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let config = AppConfig::load().context("load config")?;
+    if args.seed {
+        config
+            .assert_seed_allowed()
+            .context("refusing --seed in production")?;
+    }
     init_tracing(&config.log_level, !config.is_dev());
     if config.telemetry_opt_in {
         let _ = openpay_observability::init_metrics(&config.metrics_bind_addr);
@@ -34,7 +39,8 @@ async fn main() -> anyhow::Result<()> {
     if args.seed || config.is_dev() {
         let webhook = format!(
             "{}/webhooks/openpay",
-            std::env::var("DEMO_MERCHANT_URL").unwrap_or_else(|_| "http://demo-merchant:3002".into())
+            std::env::var("DEMO_MERCHANT_URL")
+                .unwrap_or_else(|_| "http://demo-merchant:3002".into())
         );
         seed_demo(&pool, &webhook).await.context("seed")?;
         tracing::info!("demo seed applied");

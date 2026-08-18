@@ -1,11 +1,12 @@
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_tracing(log_level: &str, json: bool) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
     let registry = tracing_subscriber::registry().with(filter);
     if json {
-        registry.with(fmt::layer().json().flatten_event(true)).init();
+        registry
+            .with(fmt::layer().json().flatten_event(true))
+            .init();
     } else {
         registry.with(fmt::layer()).init();
     }

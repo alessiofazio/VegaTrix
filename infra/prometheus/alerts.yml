@@ -1,0 +1,54 @@
+# OpenPay Prometheus alert rules.
+#
+# Scrape setup (opt-in only):
+#   1. Set TELEMETRY_OPT_IN=true on server and worker.
+#   2. Scrape METRICS_BIND_ADDR (default 0.0.0.0:9090) on each process.
+#      Compose/K8s: scrape the API replica(s) and the worker separately.
+#   3. Load this file with Prometheus `rule_files`.
+#
+# Metric names:
+#   openpay_webhook_failed              counter  (delivery HTTP/SSRF failures)
+#   openpay_webhook_dead_lettered       counter  (exhausted retries / DLQ)
+#   openpay_webhook_delivered           counter
+#   openpay_payments_processing         gauge    (PROCESSING + ambiguous attempts)
+#   openpay_payments_expired            counter  (worker expiry tick)
+#   openpay_http_requests_total         counter  labels: method, path, status
+
+groups:
+  - name: openpay
+    rules:
+      - alert: OpenPayWebhookFailures
+        expr: increase(openpay_webhook_failed[15m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenPay webhook deliveries are failing
+          description: More than 10 webhook failures in 15m. Check allowlist, merchant endpoint, and DLQ.
+
+      - alert: OpenPayWebhookDeadLetter
+        expr: increase(openpay_webhook_dead_lettered[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: OpenPay webhook moved to DLQ
+          description: A merchant webhook exhausted retries. Inspect webhook_deliveries status=dead_lettered.
+
+      - alert: OpenPayPaymentsStuckProcessing
+        expr: openpay_payments_processing > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Payments stuck in PROCESSING
+          description: Worker gauge of reconcilable PROCESSING payments is above 5 for 10m.
+
+      - alert: OpenPayHttp5xx
+        expr: sum(rate(openpay_http_requests_total{status=~"5.."}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenPay HTTP 5xx rate is elevated
+          description: API is returning 5xx. Check /readyz, Postgres, and server logs.

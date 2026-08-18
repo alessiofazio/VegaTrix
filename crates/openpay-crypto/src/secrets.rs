@@ -1,11 +1,11 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 
-use crate::hmac_util::{sha256_hex, CryptoError};
+use crate::hmac_util::{CryptoError, sha256_hex};
 
 pub fn generate_api_key() -> String {
     let mut bytes = [0u8; 32];

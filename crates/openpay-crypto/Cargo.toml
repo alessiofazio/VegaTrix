@@ -4,9 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "HMAC signing, QR tokens, webhook signatures, API key hashing"
+description = "HMAC signing, QR tokens, webhook signatures, API key hashing, secret envelopes"
 
 [dependencies]
+aes-gcm.workspace = true
 argon2.workspace = true
 base64.workspace = true
 hex.workspace = true

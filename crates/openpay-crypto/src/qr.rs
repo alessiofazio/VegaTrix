@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::hmac_util::{hmac_sha256_hex, verify_hmac_sha256, CryptoError};
+use crate::hmac_util::{CryptoError, hmac_sha256_hex, verify_hmac_sha256};
 use openpay_domain::{MerchantId, PaymentId, TenantId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,17 +40,25 @@ impl QrClaims {
 
     pub fn encode(&self, secret: &[u8]) -> Result<String, CryptoError> {
         let payload = serde_json::to_vec(self).map_err(|_| CryptoError::Malformed)?;
-        let b64 = base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload);
+        let b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload);
         let sig = hmac_sha256_hex(secret, b64.as_bytes())?;
         Ok(format!("{b64}.{sig}"))
     }
 }
 
-pub fn parse_and_verify_qr_token(secret: &[u8], token: &str, now: OffsetDateTime) -> Result<QrClaims, CryptoError> {
+pub fn parse_and_verify_qr_token(
+    secret: &[u8],
+    token: &str,
+    now: OffsetDateTime,
+) -> Result<QrClaims, CryptoError> {
     let (payload_b64, sig) = token.split_once('.').ok_or(CryptoError::Malformed)?;
     verify_hmac_sha256(secret, payload_b64.as_bytes(), sig)?;
-    let json = base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, payload_b64)
-        .map_err(|_| CryptoError::Malformed)?;
+    let json = base64::Engine::decode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        payload_b64,
+    )
+    .map_err(|_| CryptoError::Malformed)?;
     let claims: QrClaims = serde_json::from_slice(&json).map_err(|_| CryptoError::Malformed)?;
     if now.unix_timestamp() > claims.exp {
         return Err(CryptoError::Expired);

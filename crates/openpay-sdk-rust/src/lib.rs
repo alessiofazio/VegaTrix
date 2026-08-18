@@ -58,7 +58,9 @@ impl OpenPayClient {
     }
 
     pub async fn get_payment(&self, payment_id: &str) -> Result<CreatePaymentResponse, SdkError> {
-        let url = self.base.join(&format!("/v1/payment-requests/{payment_id}"))?;
+        let url = self
+            .base
+            .join(&format!("/v1/payment-requests/{payment_id}"))?;
         let response = self.http.get(url).bearer_auth(&self.token).send().await?;
         let status = response.status();
         let bytes = response.bytes().await?;

@@ -72,10 +72,7 @@ impl Default for FallbackSpec {
         Self {
             enabled: true,
             max_attempts: 2,
-            allowed_failure_codes: vec![
-                "CONNECTOR_UNAVAILABLE".into(),
-                "TIMEOUT".into(),
-            ],
+            allowed_failure_codes: vec!["CONNECTOR_UNAVAILABLE".into(), "TIMEOUT".into()],
         }
     }
 }

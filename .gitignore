@@ -2,7 +2,9 @@
 /Cargo.lock.bak
 .env
 .env.local
+.env.production
 .env.*.local
+/backups
 *.pem
 *.key
 !docs/**/*.md

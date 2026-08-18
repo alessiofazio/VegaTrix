@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
+use crate::ApplicationError;
+use crate::payments::PaymentService;
+use crate::ports::PaymentRepository;
 use openpay_connectors::{CreatePaymentAttemptInput, GetPaymentAttemptInput, PaymentConnector};
 use openpay_domain::{
     AttemptId, AttemptStatus, PaymentAttempt, PaymentId, PaymentMethod, PaymentRequest,
     PaymentStatus, TenantId,
 };
 use time::OffsetDateTime;
-use crate::payments::PaymentService;
-use crate::ports::PaymentRepository;
-use crate::ApplicationError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PayerDecision {
@@ -43,7 +43,8 @@ pub async fn authorize_payment<P, M, A, O, R, C, K, Cl>(
     payment_id: PaymentId,
     decision: PayerDecision,
     scenario: Option<String>,
-) -> Result<AuthorizeOutcome, ApplicationError>where
+) -> Result<AuthorizeOutcome, ApplicationError>
+where
     P: PaymentRepository,
     M: crate::ports::MerchantRepository,
     A: crate::ports::AuditRepository,
@@ -204,7 +205,8 @@ pub async fn replay_connector_callback<P, M, A, O, R, C, K, Cl>(
     connectors: &dyn ConnectorLookup,
     tenant_id: TenantId,
     payment_id: PaymentId,
-) -> Result<AuthorizeOutcome, ApplicationError>where
+) -> Result<AuthorizeOutcome, ApplicationError>
+where
     P: PaymentRepository,
     M: crate::ports::MerchantRepository,
     A: crate::ports::AuditRepository,
@@ -214,15 +216,20 @@ pub async fn replay_connector_callback<P, M, A, O, R, C, K, Cl>(
     K: crate::ports::QrNonceStore,
     Cl: crate::ports::Clock,
 {
-    let payment = payments.get_payment(tenant_id, payment_id).await?;
-    let attempts = payments.payments.list_attempts(tenant_id, payment_id).await?;
+    let _payment = payments.get_payment(tenant_id, payment_id).await?;
+    let attempts = payments
+        .payments
+        .list_attempts(tenant_id, payment_id)
+        .await?;
     let attempt = attempts
         .last()
         .ok_or(ApplicationError::Connector("no attempt to replay".into()))?;
     let provider_ref = attempt
         .provider_reference
         .clone()
-        .ok_or(ApplicationError::Connector("missing provider reference".into()))?;
+        .ok_or(ApplicationError::Connector(
+            "missing provider reference".into(),
+        ))?;
 
     let connector = connectors
         .get(&attempt.connector_key)
@@ -239,7 +246,7 @@ pub async fn replay_connector_callback<P, M, A, O, R, C, K, Cl>(
     let current = payments.get_payment(tenant_id, payment_id).await?;
     Ok(AuthorizeOutcome {
         payment: current,
-        connector_key: attempt.connector_key,
+        connector_key: attempt.connector_key.clone(),
         explanation: format!("duplicate callback ignored for {provider_ref}"),
         idempotent_replay: true,
     })
@@ -266,7 +273,10 @@ where
     if payment.status != PaymentStatus::Processing {
         return Ok(payment);
     }
-    let attempts = payments.payments.list_attempts(tenant_id, payment_id).await?;
+    let attempts = payments
+        .payments
+        .list_attempts(tenant_id, payment_id)
+        .await?;
     let attempt = attempts
         .iter()
         .rev()
@@ -281,7 +291,9 @@ where
     let provider_ref = attempt
         .provider_reference
         .clone()
-        .ok_or(ApplicationError::Connector("missing provider reference".into()))?;
+        .ok_or(ApplicationError::Connector(
+            "missing provider reference".into(),
+        ))?;
     let connector = connectors
         .get(&attempt.connector_key)
         .ok_or_else(|| ApplicationError::Connector("connector missing".into()))?;
@@ -307,7 +319,8 @@ pub async fn reconcile_stale_attempts<P, M, A, O, R, C, K, Cl>(
     payments: &PaymentService<P, M, A, O, R, C, K, Cl>,
     connectors: &dyn ConnectorLookup,
     limit: i64,
-) -> Result<u32, ApplicationError>where
+) -> Result<u32, ApplicationError>
+where
     P: PaymentRepository,
     M: crate::ports::MerchantRepository,
     A: crate::ports::AuditRepository,

@@ -9,6 +9,7 @@ description = "Validated configuration, editions, and feature flags"
 [dependencies]
 config.workspace = true
 dotenvy.workspace = true
+openpay-crypto.workspace = true
 openpay-domain.workspace = true
 serde.workspace = true
 thiserror.workspace = true

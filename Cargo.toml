@@ -45,6 +45,7 @@ openpay-observability = { path = "crates/openpay-observability" }
 openpay-sdk-rust = { path = "crates/openpay-sdk-rust" }
 openpay-testkit = { path = "crates/openpay-testkit" }
 
+aes-gcm = "0.10"
 anyhow = "1"
 argon2 = "0.5"
 async-trait = "0.1"

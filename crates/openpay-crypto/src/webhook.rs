@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
 
-use crate::hmac_util::{hmac_sha256_hex, verify_hmac_sha256, CryptoError};
+use crate::hmac_util::{CryptoError, hmac_sha256_hex, verify_hmac_sha256};
 
 /// `OpenPay-Signature: t=<unix>,v1=<hex>`
 pub fn sign_webhook(secret: &[u8], timestamp: i64, raw_body: &[u8]) -> Result<String, CryptoError> {
@@ -59,7 +59,12 @@ mod tests {
         let secret = b"whsec_test_secret_value________";
         let body = b"{}";
         let now = OffsetDateTime::now_utc();
-        let header = sign_webhook(secret, (now - Duration::seconds(400)).unix_timestamp(), body).unwrap();
+        let header = sign_webhook(
+            secret,
+            (now - Duration::seconds(400)).unix_timestamp(),
+            body,
+        )
+        .unwrap();
         assert!(verify_webhook(secret, &header, body, now, 300).is_err());
     }
 }

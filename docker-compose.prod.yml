@@ -1,0 +1,85 @@
+# Production-like stack: postgres, redis, API server, worker.
+# No dashboard, demo wallet, demo merchant, or auto-seed.
+#
+#   cp .env.production.example .env.production
+#   # fill real secrets, https URLs, webhook allowlist
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up --build
+#
+# Put a TLS reverse proxy in front of :8080. APP_ENV=production refuses
+# placeholder secrets, FEATURE_CONNECTOR_MOCK=true, empty WEBHOOK_URL_ALLOWLIST,
+# http:// public URLs, and --seed.
+#
+# Metrics: set TELEMETRY_OPT_IN=true and scrape METRICS_BIND_ADDR (default :9090).
+# See infra/prometheus/alerts.yml.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openpay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-openpay}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openpay} -d ${POSTGRES_DB:-openpay}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      FEATURE_CONNECTOR_MOCK: "false"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-openpay}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openpay}
+      REDIS_URL: redis://redis:6379
+      BIND_ADDR: 0.0.0.0:8080
+    # Image entrypoint is openpay-server with no --seed (rejected in production anyway).
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 25s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      FEATURE_CONNECTOR_MOCK: "false"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-openpay}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openpay}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      server:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata_prod:

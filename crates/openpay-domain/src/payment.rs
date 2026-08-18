@@ -4,8 +4,8 @@ use time::OffsetDateTime;
 
 use crate::error::DomainError;
 use crate::ids::{
-    AttemptId, ConnectorId, IdempotencyKey, MerchantId, MerchantOrderId, PaymentId, RoutingPolicyId,
-    TenantId,
+    AttemptId, ConnectorId, IdempotencyKey, MerchantId, MerchantOrderId, PaymentId,
+    RoutingPolicyId, TenantId,
 };
 use crate::money::{AmountMinor, Currency};
 use crate::status::{AttemptStatus, PaymentMethod, PaymentStatus};
@@ -32,14 +32,22 @@ pub struct PaymentRequest {
 }
 
 impl PaymentRequest {
-    pub fn transition(&mut self, next: PaymentStatus, now: OffsetDateTime) -> Result<(), DomainError> {
+    pub fn transition(
+        &mut self,
+        next: PaymentStatus,
+        now: OffsetDateTime,
+    ) -> Result<(), DomainError> {
         self.status = self.status.transition(next)?;
         self.updated_at = now;
         self.version += 1;
         Ok(())
     }
 
-    pub fn belongs_to(&self, tenant_id: TenantId, merchant_id: MerchantId) -> Result<(), DomainError> {
+    pub fn belongs_to(
+        &self,
+        tenant_id: TenantId,
+        merchant_id: MerchantId,
+    ) -> Result<(), DomainError> {
         if self.tenant_id != tenant_id {
             return Err(DomainError::TenantMismatch);
         }
@@ -51,6 +59,19 @@ impl PaymentRequest {
 
     pub fn is_expired(&self, now: OffsetDateTime) -> bool {
         now >= self.expires_at && !self.status.is_terminal() && !self.status.is_settled_family()
+    }
+
+    /// Returns `Expired` when the payment is past `expires_at` and the state machine
+    /// allows that transition. PROCESSING is intentionally skipped (illegal).
+    pub fn expiry_target(&self, now: OffsetDateTime) -> Option<PaymentStatus> {
+        if !self.is_expired(now) {
+            return None;
+        }
+        if self.status.can_transition_to(PaymentStatus::Expired) {
+            Some(PaymentStatus::Expired)
+        } else {
+            None
+        }
     }
 }
 
@@ -100,4 +121,54 @@ pub struct TransitionPaymentCommand {
     pub actor_type: String,
     pub actor_id: String,
     pub reason: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::{Duration, OffsetDateTime};
+
+    fn sample(status: PaymentStatus, expires_at: OffsetDateTime) -> PaymentRequest {
+        PaymentRequest {
+            id: PaymentId::new(),
+            tenant_id: TenantId::new(),
+            merchant_id: MerchantId::new(),
+            merchant_order_id: MerchantOrderId::new("ord-1").unwrap(),
+            amount_minor: AmountMinor::new(1200).unwrap(),
+            currency: Currency::EUR,
+            status,
+            allowed_methods: vec![PaymentMethod::AccountToAccount],
+            description: None,
+            expires_at,
+            return_url: None,
+            metadata: serde_json::json!({}),
+            idempotency_key: IdempotencyKey::new("idem-1").unwrap(),
+            routing_policy_id: None,
+            version: 1,
+            created_at: expires_at,
+            updated_at: expires_at,
+        }
+    }
+
+    #[test]
+    fn pending_past_expiry_becomes_expired() {
+        let now = OffsetDateTime::now_utc();
+        let payment = sample(PaymentStatus::Pending, now - Duration::seconds(1));
+        assert_eq!(payment.expiry_target(now), Some(PaymentStatus::Expired));
+    }
+
+    #[test]
+    fn processing_past_expiry_is_not_forced() {
+        let now = OffsetDateTime::now_utc();
+        let payment = sample(PaymentStatus::Processing, now - Duration::seconds(1));
+        assert!(payment.is_expired(now));
+        assert_eq!(payment.expiry_target(now), None);
+    }
+
+    #[test]
+    fn pending_before_expiry_stays() {
+        let now = OffsetDateTime::now_utc();
+        let payment = sample(PaymentStatus::Pending, now + Duration::seconds(60));
+        assert_eq!(payment.expiry_target(now), None);
+    }
 }

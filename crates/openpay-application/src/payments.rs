@@ -2,7 +2,7 @@ use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
-use openpay_crypto::{generate_nonce, qr_uri, QrClaims};
+use openpay_crypto::{QrClaims, generate_nonce, qr_uri};
 use openpay_domain::{
     AmountMinor, AuditEvent, CreatePaymentCommand, Currency, DomainError, EventId, MerchantOrderId,
     PaymentId, PaymentMethod, PaymentRequest, PaymentStatus, RoutingContext, TenantId,
@@ -156,20 +156,9 @@ where
     ) -> Result<PaymentRequest, ApplicationError> {
         let payment = self.payments.get_by_id(tenant_id, payment_id).await?;
         let now = self.clock.now();
-        if payment.is_expired(now)
-            && matches!(
-                payment.status,
-                PaymentStatus::Pending | PaymentStatus::RequiresAction
-            )
-        {
+        if let Some(next) = payment.expiry_target(now) {
             return self
-                .apply_status(
-                    &payment,
-                    PaymentStatus::Expired,
-                    "system",
-                    "expiry",
-                    "payment.expired",
-                )
+                .apply_status(&payment, next, "system", "expiry", "payment.expired")
                 .await;
         }
         Ok(payment)
@@ -203,7 +192,8 @@ where
         actor: &str,
     ) -> Result<PaymentRequest, ApplicationError> {
         let payment = self.payments.get_by_id(tenant_id, payment_id).await?;
-        if payment.status != PaymentStatus::Settled && payment.status != PaymentStatus::PartiallyRefunded
+        if payment.status != PaymentStatus::Settled
+            && payment.status != PaymentStatus::PartiallyRefunded
         {
             return Err(ApplicationError::Domain(DomainError::NotRefundable(
                 payment.status.as_str().into(),
@@ -257,6 +247,25 @@ where
             )
             .await?;
         Ok(updated)
+    }
+
+    pub async fn expire_stale_payments(&self, limit: i64) -> Result<u32, ApplicationError> {
+        let now = self.clock.now();
+        let due = self.payments.list_expirable_payments(now, limit).await?;
+        let mut n = 0u32;
+        for payment in due {
+            let Some(next) = payment.expiry_target(now) else {
+                continue;
+            };
+            if self
+                .apply_status(&payment, next, "system", "expiry", "payment.expired")
+                .await
+                .is_ok()
+            {
+                n += 1;
+            }
+        }
+        Ok(n)
     }
 
     pub async fn decide_route(
@@ -346,7 +355,11 @@ fn audit_event(
     }
 }
 
-pub fn payment_outbox(payment: &PaymentRequest, event_type: &str, now: OffsetDateTime) -> OutboxRecord {
+pub fn payment_outbox(
+    payment: &PaymentRequest,
+    event_type: &str,
+    now: OffsetDateTime,
+) -> OutboxRecord {
     payment_outbox_with_status(payment, event_type, payment.status, now)
 }
 
@@ -382,9 +395,8 @@ pub fn payment_outbox_with_status(
 }
 
 pub fn render_qr_svg(payload: &str) -> String {
-    let qr = qrcode::QrCode::new(payload.as_bytes()).unwrap_or_else(|_| {
-        qrcode::QrCode::new(b"openpay://invalid").expect("fallback qr")
-    });
+    let qr = qrcode::QrCode::new(payload.as_bytes())
+        .unwrap_or_else(|_| qrcode::QrCode::new(b"openpay://invalid").expect("fallback qr"));
     qr.render::<qrcode::render::svg::Color<'_>>()
         .min_dimensions(256, 256)
         .build()
@@ -402,7 +414,13 @@ pub fn parse_order_id(raw: &str) -> Result<MerchantOrderId, ApplicationError> {
     MerchantOrderId::new(raw).map_err(ApplicationError::Domain)
 }
 
-pub fn fingerprint_for_test(merchant: &str, order: &str, amount: i64, currency: &str, key: &str) -> String {
+pub fn fingerprint_for_test(
+    merchant: &str,
+    order: &str,
+    amount: i64,
+    currency: &str,
+    key: &str,
+) -> String {
     let raw = format!("{merchant}|{order}|{amount}|{currency}|{key}");
     openpay_crypto::sha256_hex(raw.as_bytes())
 }

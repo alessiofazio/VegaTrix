@@ -17,8 +17,8 @@ use openpay_domain::{
 };
 
 use crate::map::{
-    methods_json, ApiKeyRow, AttemptRow, AuditRow, ConnectorCatRow, DeliveryRow, EndpointRow,
-    MerchantRow, OutboxRow, PaymentRow, PolicyRow, TenantRow, UserRow,
+    ApiKeyRow, AttemptRow, AuditRow, ConnectorCatRow, DeliveryRow, EndpointRow, MerchantRow,
+    OutboxRow, PaymentRow, PolicyRow, TenantRow, UserRow, methods_json,
 };
 
 #[derive(Clone)]
@@ -143,7 +143,9 @@ impl PgStore {
         let mut out = Vec::new();
         for row in rows {
             let payload = self.load_delivery_payload(row.id).await?;
-            let endpoint = self.get_endpoint(WebhookEndpointId::from_uuid(row.webhook_endpoint_id)).await?;
+            let endpoint = self
+                .get_endpoint(WebhookEndpointId::from_uuid(row.webhook_endpoint_id))
+                .await?;
             out.push((row.try_into()?, payload, endpoint));
         }
         Ok(out)
@@ -260,15 +262,14 @@ impl PaymentRepository for PgStore {
         tenant_id: TenantId,
         payment_id: PaymentId,
     ) -> Result<PaymentRequest, RepositoryError> {
-        let row: PaymentRow = sqlx::query_as(
-            "SELECT * FROM payment_requests WHERE id = $1 AND tenant_id = $2",
-        )
-        .bind(payment_id.as_uuid())
-        .bind(tenant_id.as_uuid())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(infra)?
-        .ok_or(RepositoryError::NotFound)?;
+        let row: PaymentRow =
+            sqlx::query_as("SELECT * FROM payment_requests WHERE id = $1 AND tenant_id = $2")
+                .bind(payment_id.as_uuid())
+                .bind(tenant_id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(infra)?
+                .ok_or(RepositoryError::NotFound)?;
         row.try_into()
     }
 
@@ -345,7 +346,10 @@ impl PaymentRepository for PgStore {
         Ok(payment)
     }
 
-    async fn insert_attempt(&self, attempt: PaymentAttempt) -> Result<PaymentAttempt, RepositoryError> {
+    async fn insert_attempt(
+        &self,
+        attempt: PaymentAttempt,
+    ) -> Result<PaymentAttempt, RepositoryError> {
         sqlx::query(
             "INSERT INTO payment_attempts (
                 id, tenant_id, payment_request_id, connector_id, connector_key, rail_type,
@@ -397,19 +401,21 @@ impl PaymentRepository for PgStore {
         tenant_id: TenantId,
         attempt_id: AttemptId,
     ) -> Result<PaymentAttempt, RepositoryError> {
-        let row: AttemptRow = sqlx::query_as(
-            "SELECT * FROM payment_attempts WHERE id = $1 AND tenant_id = $2",
-        )
-        .bind(attempt_id.as_uuid())
-        .bind(tenant_id.as_uuid())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(infra)?
-        .ok_or(RepositoryError::NotFound)?;
+        let row: AttemptRow =
+            sqlx::query_as("SELECT * FROM payment_attempts WHERE id = $1 AND tenant_id = $2")
+                .bind(attempt_id.as_uuid())
+                .bind(tenant_id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(infra)?
+                .ok_or(RepositoryError::NotFound)?;
         row.try_into()
     }
 
-    async fn update_attempt(&self, attempt: PaymentAttempt) -> Result<PaymentAttempt, RepositoryError> {
+    async fn update_attempt(
+        &self,
+        attempt: PaymentAttempt,
+    ) -> Result<PaymentAttempt, RepositoryError> {
         sqlx::query(
             "UPDATE payment_attempts SET status=$1, provider_reference=$2, failure_code=$3,
              failure_message_safe=$4, authorized_at=$5, settled_at=$6, updated_at=$7
@@ -452,6 +458,26 @@ impl PaymentRepository for PgStore {
             .map(|(t, p)| (TenantId::from_uuid(t), PaymentId::from_uuid(p)))
             .collect())
     }
+
+    async fn list_expirable_payments(
+        &self,
+        now: OffsetDateTime,
+        limit: i64,
+    ) -> Result<Vec<PaymentRequest>, RepositoryError> {
+        let rows: Vec<PaymentRow> = sqlx::query_as(
+            "SELECT * FROM payment_requests
+             WHERE expires_at <= $1
+               AND status IN ('PENDING', 'REQUIRES_ACTION')
+             ORDER BY expires_at ASC
+             LIMIT $2",
+        )
+        .bind(now)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(infra)?;
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
 }
 
 #[async_trait]
@@ -461,15 +487,14 @@ impl MerchantRepository for PgStore {
         tenant_id: TenantId,
         merchant_id: MerchantId,
     ) -> Result<Merchant, RepositoryError> {
-        let row: MerchantRow = sqlx::query_as(
-            "SELECT * FROM merchants WHERE id = $1 AND tenant_id = $2",
-        )
-        .bind(merchant_id.as_uuid())
-        .bind(tenant_id.as_uuid())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(infra)?
-        .ok_or(RepositoryError::NotFound)?;
+        let row: MerchantRow =
+            sqlx::query_as("SELECT * FROM merchants WHERE id = $1 AND tenant_id = $2")
+                .bind(merchant_id.as_uuid())
+                .bind(tenant_id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(infra)?
+                .ok_or(RepositoryError::NotFound)?;
         row.try_into()
     }
 
@@ -484,13 +509,12 @@ impl MerchantRepository for PgStore {
     }
 
     async fn list_merchants(&self, tenant_id: TenantId) -> Result<Vec<Merchant>, RepositoryError> {
-        let rows: Vec<MerchantRow> = sqlx::query_as(
-            "SELECT * FROM merchants WHERE tenant_id = $1 ORDER BY display_name",
-        )
-        .bind(tenant_id.as_uuid())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(infra)?;
+        let rows: Vec<MerchantRow> =
+            sqlx::query_as("SELECT * FROM merchants WHERE tenant_id = $1 ORDER BY display_name")
+                .bind(tenant_id.as_uuid())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(infra)?;
         rows.into_iter().map(TryInto::try_into).collect()
     }
 }
@@ -574,10 +598,14 @@ impl WebhookRepository for PgStore {
     }
 
     async fn insert_delivery(&self, delivery: WebhookDelivery) -> Result<(), RepositoryError> {
-        self.insert_delivery_with_payload(&delivery, &Value::Null).await
+        self.insert_delivery_with_payload(&delivery, &Value::Null)
+            .await
     }
 
-    async fn list_pending_deliveries(&self, limit: i64) -> Result<Vec<WebhookDelivery>, RepositoryError> {
+    async fn list_pending_deliveries(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<WebhookDelivery>, RepositoryError> {
         Ok(self
             .pending_deliveries_full(limit)
             .await?
@@ -734,7 +762,10 @@ impl RoutingRepository for PgStore {
 
 #[async_trait]
 impl ConnectorCatalog for PgStore {
-    async fn list_enabled(&self, tenant_id: TenantId) -> Result<Vec<ConnectorSnapshot>, RepositoryError> {
+    async fn list_enabled(
+        &self,
+        tenant_id: TenantId,
+    ) -> Result<Vec<ConnectorSnapshot>, RepositoryError> {
         let rows: Vec<ConnectorCatRow> = sqlx::query_as(
             "SELECT key, health_status, capabilities, priority, status FROM connectors
              WHERE status = 'enabled' AND (tenant_id IS NULL OR tenant_id = $1)",
@@ -812,7 +843,10 @@ impl PgStore {
         Ok(())
     }
 
-    pub async fn list_recent_deliveries(&self, limit: i64) -> Result<Vec<WebhookDelivery>, RepositoryError> {
+    pub async fn list_recent_deliveries(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<WebhookDelivery>, RepositoryError> {
         let rows: Vec<DeliveryRow> = sqlx::query_as(
             "SELECT id, webhook_endpoint_id, event_id, payload_version, status, attempt_count,
                     next_retry_at, response_code, last_error_safe, created_at, updated_at
@@ -825,7 +859,10 @@ impl PgStore {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
-    pub async fn list_api_keys(&self, tenant_id: TenantId) -> Result<Vec<ApiKeyRecord>, RepositoryError> {
+    pub async fn list_api_keys(
+        &self,
+        tenant_id: TenantId,
+    ) -> Result<Vec<ApiKeyRecord>, RepositoryError> {
         let rows: Vec<ApiKeyRow> = sqlx::query_as(
             "SELECT id, tenant_id, merchant_id, name, hash, fingerprint, scopes, revoked
              FROM api_keys WHERE tenant_id = $1 ORDER BY created_at DESC",

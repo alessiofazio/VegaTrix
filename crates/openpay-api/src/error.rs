@@ -1,6 +1,6 @@
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::Serialize;
 
 use openpay_application::{ApplicationError, RepositoryError};
@@ -62,12 +62,18 @@ impl From<ApplicationError> for ApiError {
                 "Illegal payment transition",
                 format!("{from} → {to}"),
             ),
-            ApplicationError::Domain(other) => {
-                Self::new(StatusCode::BAD_REQUEST, "validation", "Validation failed", other.to_string())
-            }
-            ApplicationError::Repository(RepositoryError::NotFound) => {
-                Self::new(StatusCode::NOT_FOUND, "not-found", "Not found", "resource not found")
-            }
+            ApplicationError::Domain(other) => Self::new(
+                StatusCode::BAD_REQUEST,
+                "validation",
+                "Validation failed",
+                other.to_string(),
+            ),
+            ApplicationError::Repository(RepositoryError::NotFound) => Self::new(
+                StatusCode::NOT_FOUND,
+                "not-found",
+                "Not found",
+                "resource not found",
+            ),
             ApplicationError::Repository(RepositoryError::IdempotencyMismatch) => Self::new(
                 StatusCode::CONFLICT,
                 "idempotency",
@@ -83,15 +89,24 @@ impl From<ApplicationError> for ApiError {
             ApplicationError::Repository(RepositoryError::Conflict(msg)) => {
                 Self::new(StatusCode::CONFLICT, "conflict", "Conflict", msg)
             }
-            ApplicationError::Forbidden | ApplicationError::Replay => {
-                Self::new(StatusCode::FORBIDDEN, "forbidden", "Forbidden", "token rejected")
-            }
-            ApplicationError::Expired => {
-                Self::new(StatusCode::GONE, "expired", "Expired", "token or payment expired")
-            }
-            ApplicationError::Routing(msg) | ApplicationError::Connector(msg) => {
-                Self::new(StatusCode::UNPROCESSABLE_ENTITY, "connector", "Connector error", msg)
-            }
+            ApplicationError::Forbidden | ApplicationError::Replay => Self::new(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Forbidden",
+                "token rejected",
+            ),
+            ApplicationError::Expired => Self::new(
+                StatusCode::GONE,
+                "expired",
+                "Expired",
+                "token or payment expired",
+            ),
+            ApplicationError::Routing(msg) | ApplicationError::Connector(msg) => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "connector",
+                "Connector error",
+                msg,
+            ),
             ApplicationError::Repository(RepositoryError::Infra(msg)) => {
                 tracing::error!(error = %msg, "infrastructure error");
                 Self::new(

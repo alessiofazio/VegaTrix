@@ -1,15 +1,16 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::Context;use axum::routing::get;
+use anyhow::Context;
 use axum::Router;
+use axum::routing::get;
 use clap::Parser;
 use connector_mock_instant::MockInstantConnector;
 use openpay_config::AppConfig;
 use openpay_connectors::ConnectorRegistry;
 use openpay_observability::init_tracing;
-use openpay_persistence::{connect, migrate, PgStore};
-use openpay_worker::{run_loop, WorkerRuntime};
+use openpay_persistence::{PgStore, connect, migrate};
+use openpay_worker::{WorkerRuntime, run_loop};
 
 #[derive(Parser, Debug)]
 struct Args {}

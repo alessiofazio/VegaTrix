@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
 use axum::http::StatusCode;
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use axum::http::request::Parts;
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 
@@ -63,13 +63,27 @@ pub fn issue_tokens(
         &access,
         &EncodingKey::from_secret(secret_access.as_bytes()),
     )
-    .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "auth", "Auth error", "token"))?;
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "auth",
+            "Auth error",
+            "token",
+        )
+    })?;
     let refresh_jwt = encode(
         &Header::default(),
         &refresh,
         &EncodingKey::from_secret(secret_refresh.as_bytes()),
     )
-    .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "auth", "Auth error", "token"))?;
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "auth",
+            "Auth error",
+            "token",
+        )
+    })?;
     Ok((access_jwt, refresh_jwt))
 }
 
@@ -79,7 +93,14 @@ pub fn decode_refresh(secret: &str, token: &str) -> Result<JwtClaims, ApiError> 
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "invalid token"))?;
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "auth",
+            "Unauthorized",
+            "invalid token",
+        )
+    })?;
     if data.claims.typ != "refresh" {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -97,7 +118,14 @@ pub fn decode_access(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "invalid token"))?;
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "auth",
+            "Unauthorized",
+            "invalid token",
+        )
+    })?;
     if data.claims.typ != "access" {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -121,11 +149,16 @@ impl FromRequestParts<Arc<AppState>> for AuthContext {
             .get(axum::http::header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| {
-                ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "missing bearer")
+                ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    "auth",
+                    "Unauthorized",
+                    "missing bearer",
+                )
             })?;
-        let token = header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "bearer"))?;
+        let token = header.strip_prefix("Bearer ").ok_or_else(|| {
+            ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "bearer")
+        })?;
 
         if token.starts_with("opk_") {
             return authenticate_api_key(&state.store, token).await;
@@ -133,15 +166,23 @@ impl FromRequestParts<Arc<AppState>> for AuthContext {
 
         let claims = decode_access(&state.config.jwt_access_secret, token)?;
         Ok(AuthContext {
-            tenant_id: claims
-                .tenant_id
-                .parse()
-                .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "tenant"))?,
+            tenant_id: claims.tenant_id.parse().map_err(|_| {
+                ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "tenant")
+            })?,
             merchant_id: None,
             actor_id: claims.sub,
-            role: claims.role,
-            scopes: vec!["admin".into()],
+            role: claims.role.clone(),
+            scopes: scopes_for_role(&claims.role),
         })
+    }
+}
+
+pub fn scopes_for_role(role: &str) -> Vec<String> {
+    match role.trim().to_ascii_lowercase().as_str() {
+        "admin" => vec!["admin".into()],
+        "merchant" => vec!["merchant".into()],
+        other if other.is_empty() => Vec::new(),
+        other => vec![other.to_string()],
     }
 }
 
@@ -151,7 +192,14 @@ async fn authenticate_api_key(store: &PgStore, token: &str) -> Result<AuthContex
         .find_by_fingerprint(&fingerprint)
         .await
         .map_err(openpay_application::ApplicationError::from)?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "unknown key"))?;
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "auth",
+                "Unauthorized",
+                "unknown key",
+            )
+        })?;
     if record.revoked {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -203,9 +251,10 @@ pub async fn refresh(
     axum::Json(body): axum::Json<RefreshRequest>,
 ) -> Result<axum::Json<TokenResponse>, ApiError> {
     let claims = decode_refresh(&state.config.jwt_refresh_secret, &body.refresh_token)?;
-    let tenant_id: TenantId = claims.tenant_id.parse().map_err(|_| {
-        ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "tenant")
-    })?;
+    let tenant_id: TenantId = claims
+        .tenant_id
+        .parse()
+        .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "tenant"))?;
     let (access, refresh) = issue_tokens(
         &state.config.jwt_access_secret,
         &state.config.jwt_refresh_secret,
@@ -232,7 +281,14 @@ pub async fn login(
         .find_by_email(&body.email)
         .await
         .map_err(openpay_application::ApplicationError::from)?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "auth", "Unauthorized", "invalid credentials"))?;
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "auth",
+                "Unauthorized",
+                "invalid credentials",
+            )
+        })?;
     if !verify_secret(&body.password, &user.password_hash).unwrap_or(false) {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -256,4 +312,22 @@ pub async fn login(
         edition: state.config.edition.as_str().into(),
         self_hosted: state.config.self_hosted,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scopes_for_role;
+
+    #[test]
+    fn admin_role_gets_admin_scope_only() {
+        assert_eq!(scopes_for_role("admin"), vec!["admin".to_string()]);
+        assert_eq!(scopes_for_role("Admin"), vec!["admin".to_string()]);
+    }
+
+    #[test]
+    fn merchant_role_does_not_get_admin_scope() {
+        let scopes = scopes_for_role("merchant");
+        assert_eq!(scopes, vec!["merchant".to_string()]);
+        assert!(!scopes.iter().any(|s| s == "admin"));
+    }
 }

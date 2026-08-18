@@ -6,9 +6,10 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use openpay_connectors::{
-    CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError, CreatePaymentAttemptInput,
-    CreatePaymentAttemptOutput, GetPaymentAttemptInput, ManualAttemptResolver,
-    NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput, RefundPaymentAttemptOutput,
+    CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError,
+    CreatePaymentAttemptInput, CreatePaymentAttemptOutput, GetPaymentAttemptInput,
+    ManualAttemptResolver, NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput,
+    RefundPaymentAttemptOutput,
 };
 use openpay_domain::{AttemptStatus, ConnectorCapabilities, ConnectorHealth, PaymentMethod};
 
@@ -29,7 +30,11 @@ impl ManualTestConnector {
         }
     }
 
-    pub async fn resolve(&self, provider_reference: &str, approve: bool) -> Result<(), ConnectorError> {
+    pub async fn resolve(
+        &self,
+        provider_reference: &str,
+        approve: bool,
+    ) -> Result<(), ConnectorError> {
         let mut store = self.store.lock().await;
         let attempt = store
             .get_mut(provider_reference)

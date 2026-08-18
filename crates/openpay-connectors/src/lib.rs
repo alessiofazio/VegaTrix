@@ -137,7 +137,7 @@ pub trait ManualAttemptResolver: Send + Sync {
     async fn resolve(&self, provider_reference: &str, approve: bool) -> Result<(), ConnectorError>;
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ConnectorRegistry {
     inner: std::collections::HashMap<String, std::sync::Arc<dyn PaymentConnector>>,
 }

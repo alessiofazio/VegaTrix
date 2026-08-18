@@ -1,5 +1,5 @@
 use crate::ports::{QrNonceStore, RepositoryError};
-use openpay_crypto::{parse_and_verify_qr_token, CryptoError};
+use openpay_crypto::{CryptoError, parse_and_verify_qr_token};
 use openpay_domain::{MerchantId, PaymentId, TenantId};
 use time::OffsetDateTime;
 
@@ -27,7 +27,10 @@ pub async fn verify_qr_token<S: QrNonceStore>(
         CryptoError::SignatureMismatch | CryptoError::Malformed | CryptoError::InvalidKey => {
             ApplicationError::Forbidden
         }
-        CryptoError::Hashing => ApplicationError::Connector(e.to_string()),
+        CryptoError::Hashing
+        | CryptoError::Encryption
+        | CryptoError::Decryption
+        | CryptoError::InvalidMasterKey => ApplicationError::Connector(e.to_string()),
     })?;
 
     let payment_id: PaymentId = claims
