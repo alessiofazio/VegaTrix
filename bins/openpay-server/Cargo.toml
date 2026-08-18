@@ -1,0 +1,24 @@
+[package]
+name = "openpay-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "OpenPay API server binary"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+connector-manual-test.workspace = true
+connector-mock-instant.workspace = true
+connector-open-banking-stub.workspace = true
+openpay-api.workspace = true
+openpay-config.workspace = true
+openpay-connectors.workspace = true
+openpay-observability.workspace = true
+openpay-persistence.workspace = true
+redis.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true

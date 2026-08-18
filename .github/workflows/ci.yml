@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo build --workspace --release
+      - run: cargo install cargo-audit cargo-deny --locked
+      - run: cargo audit
+      - run: cargo deny check
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: dashboard typecheck
+        working-directory: web/dashboard
+        run: npm install && npx tsc --noEmit
+      - name: demo-merchant typecheck
+        working-directory: web/demo-merchant
+        run: npm install && npx tsc --noEmit
+      - name: demo-wallet typecheck
+        working-directory: web/demo-wallet
+        run: npm install && npx tsc --noEmit
+      - name: sdk typecheck
+        working-directory: sdk/typescript
+        run: npm install && npx tsc --noEmit
+
+  e2e:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install e2e deps
+        working-directory: e2e
+        run: npm install && npx playwright install chromium
+      - name: compose up
+        run: |
+          cp .env.example .env
+          docker compose up -d --build postgres redis server worker demo-merchant demo-wallet
+          sleep 25
+          curl -sf http://localhost:8080/healthz
+      - name: playwright
+        working-directory: e2e
+        env:
+          API_BASE_URL: http://localhost:8080
+          WALLET_BASE_URL: http://localhost:3003
+        run: npm test
+      - name: compose down
+        if: always()
+        run: docker compose down -v

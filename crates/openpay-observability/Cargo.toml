@@ -1,0 +1,15 @@
+[package]
+name = "openpay-observability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "JSON tracing, Prometheus metrics, health and readiness"
+
+[dependencies]
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

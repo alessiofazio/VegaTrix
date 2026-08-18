@@ -1,0 +1,13 @@
+[package]
+name = "connector-open-banking-stub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Documented, feature-gated open banking skeleton — not a real bank connection"
+
+[dependencies]
+async-trait.workspace = true
+openpay-connectors.workspace = true
+openpay-domain.workspace = true
+thiserror.workspace = true

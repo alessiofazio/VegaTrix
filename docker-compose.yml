@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openpay
+      POSTGRES_PASSWORD: openpay
+      POSTGRES_DB: openpay
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openpay -d openpay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://openpay:openpay@postgres:5432/openpay
+      REDIS_URL: redis://redis:6379
+      BIND_ADDR: 0.0.0.0:8080
+      DEMO_MERCHANT_URL: http://demo-merchant:3002
+      CORS_ALLOW_ORIGINS: http://localhost:3001,http://localhost:3002,http://localhost:3003
+      WEBHOOK_URL_ALLOWLIST: demo-merchant,localhost
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://openpay:openpay@postgres:5432/openpay
+      REDIS_URL: redis://redis:6379
+      WEBHOOK_URL_ALLOWLIST: demo-merchant,localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+      server:
+        condition: service_started
+
+  dashboard:
+    build:
+      context: ./web/dashboard
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3001:3001"
+    depends_on:
+      - server
+
+  demo-merchant:
+    build:
+      context: ./web/demo-merchant
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+      VITE_WALLET_BASE_URL: http://localhost:3003
+      OPENPAY_WEBHOOK_SECRET: ${WEBHOOK_SIGNING_SECRET}
+    ports:
+      - "3002:3002"
+    depends_on:
+      - server
+
+  demo-wallet:
+    build:
+      context: ./web/demo-wallet
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3003:3003"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

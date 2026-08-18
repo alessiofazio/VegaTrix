@@ -1,0 +1,18 @@
+[package]
+name = "openpay-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Admin, migrate, and seed CLI"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+openpay-config.workspace = true
+openpay-crypto.workspace = true
+openpay-persistence.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

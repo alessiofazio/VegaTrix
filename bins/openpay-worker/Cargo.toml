@@ -1,0 +1,25 @@
+[package]
+name = "openpay-worker-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "OpenPay background worker binary"
+
+[[bin]]
+name = "openpay-worker"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+connector-mock-instant.workspace = true
+openpay-config.workspace = true
+openpay-connectors.workspace = true
+openpay-observability.workspace = true
+openpay-persistence.workspace = true
+openpay-worker.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true

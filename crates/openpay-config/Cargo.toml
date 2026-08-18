@@ -1,0 +1,15 @@
+[package]
+name = "openpay-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Validated configuration, editions, and feature flags"
+
+[dependencies]
+config.workspace = true
+dotenvy.workspace = true
+openpay-domain.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+url.workspace = true

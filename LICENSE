@@ -1,0 +1,36 @@
+NOT LEGAL ADVICE — MUST BE REVIEWED BY QUALIFIED COUNSEL BEFORE PUBLIC RELEASE.
+
+OpenPay Sustainable Use License (Draft)
+Version 0.1 — 2026-08-18
+
+Copyright (c) 2026 OpenPay Protocol contributors.
+
+Permission is granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the “Software”), to use, copy,
+modify, and internally run the Software, including in a self-hosted production
+environment operated solely for the licensee’s own business, subject to the
+conditions below.
+
+You may study the source, submit contributions, and distribute unmodified or
+modified copies to your own employees and contractors who need them to operate
+your internal instance, provided this notice is retained.
+
+The following uses require a separate commercial license from the rights holder
+(see LICENSE-COMMERCIAL.md):
+
+1. Offering the Software, substantially, as a hosted or managed service to
+   third parties;
+2. White-label, OEM, or embedded distribution to your customers as a product;
+3. Using the Software to operate a competing public cloud that replaces the
+   rights holder’s managed offering;
+4. Using OpenPay names, logos, or “Compatible with OpenPay” marks.
+
+This license does not grant any right to process real payments. Connecting live
+rails requires independent contracts, credentials, and regulatory authorization.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+This text is a draft. It is not a substitute for legal advice and must not be
+treated as an approved open-source or fair-code license until reviewed.

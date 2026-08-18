@@ -1,0 +1,24 @@
+[package]
+name = "openpay-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Use cases, routing policy, idempotency, and application ports"
+
+[dependencies]
+async-trait.workspace = true
+openpay-connectors.workspace = true
+openpay-crypto.workspace = true
+openpay-domain.workspace = true
+qrcode.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+openpay-testkit.workspace = true
+tokio.workspace = true

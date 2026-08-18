@@ -1,0 +1,38 @@
+[package]
+name = "openpay-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Axum HTTP adapters, auth, OpenAPI, and middleware"
+
+[dependencies]
+argon2.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+base64.workspace = true
+bytes.workspace = true
+http.workspace = true
+jsonwebtoken.workspace = true
+metrics.workspace = true
+openpay-application.workspace = true
+openpay-config.workspace = true
+openpay-connectors.workspace = true
+openpay-crypto.workspace = true
+openpay-domain.workspace = true
+openpay-observability.workspace = true
+openpay-persistence.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+utoipa-swagger-ui.workspace = true
+uuid.workspace = true
+validator.workspace = true

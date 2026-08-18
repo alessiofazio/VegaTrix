@@ -1,0 +1,7 @@
+/target
+**/.next
+**/node_modules
+.git
+.env
+*.md
+web/**/node_modules

@@ -1,0 +1,94 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openpay-domain",
+    "crates/openpay-application",
+    "crates/openpay-api",
+    "crates/openpay-worker",
+    "crates/openpay-persistence",
+    "crates/openpay-connectors",
+    "crates/connector-mock-instant",
+    "crates/connector-manual-test",
+    "crates/connector-open-banking-stub",
+    "crates/openpay-crypto",
+    "crates/openpay-config",
+    "crates/openpay-observability",
+    "crates/openpay-sdk-rust",
+    "crates/openpay-testkit",
+    "bins/openpay-server",
+    "bins/openpay-worker",
+    "bins/openpay-cli",
+]
+default-members = ["bins/openpay-server", "bins/openpay-worker", "bins/openpay-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "LicenseRef-OpenPay-SUL-Draft"
+authors = ["OpenPay Protocol contributors"]
+repository = "https://github.com/openpay-protocol/openpay-protocol"
+rust-version = "1.85"
+
+[workspace.dependencies]
+openpay-domain = { path = "crates/openpay-domain" }
+openpay-application = { path = "crates/openpay-application" }
+openpay-api = { path = "crates/openpay-api" }
+openpay-worker = { path = "crates/openpay-worker" }
+openpay-persistence = { path = "crates/openpay-persistence" }
+openpay-connectors = { path = "crates/openpay-connectors" }
+connector-mock-instant = { path = "crates/connector-mock-instant" }
+connector-manual-test = { path = "crates/connector-manual-test" }
+connector-open-banking-stub = { path = "crates/connector-open-banking-stub" }
+openpay-crypto = { path = "crates/openpay-crypto" }
+openpay-config = { path = "crates/openpay-config" }
+openpay-observability = { path = "crates/openpay-observability" }
+openpay-sdk-rust = { path = "crates/openpay-sdk-rust" }
+openpay-testkit = { path = "crates/openpay-testkit" }
+
+anyhow = "1"
+argon2 = "0.5"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["macros", "json"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive", "env"] }
+config = "0.15"
+dotenvy = "0.15"
+futures = "0.3"
+hex = "0.4"
+hmac = "0.12"
+http = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ipnet = "2"
+jsonwebtoken = "9"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
+once_cell = "1"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+rand = "0.8"
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "time", "json", "migrate", "macros"] }
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "limit", "timeout", "request-id", "set-header", "compression-gzip"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt"] }
+url = "2"
+utoipa = { version = "5", features = ["uuid", "time", "axum_extras"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+validator = { version = "0.20", features = ["derive"] }
+zeroize = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

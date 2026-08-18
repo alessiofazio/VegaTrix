@@ -1,0 +1,24 @@
+# Optional defaults; environment variables override these values at runtime.
+app_name = "OpenPay Protocol"
+environment = "development"
+self_hosted = true
+edition = "community"
+log_level = "info"
+default_currency = "EUR"
+default_timezone = "Europe/Rome"
+qr_ttl_seconds = 300
+rate_limit_per_minute = 120
+webhook_timeout_ms = 5000
+webhook_max_attempts = 8
+webhook_tolerance_secs = 300
+
+[bind]
+api = "0.0.0.0:8080"
+worker = "0.0.0.0:8081"
+metrics = "0.0.0.0:9090"
+
+[urls]
+app = "http://localhost:3000"
+api = "http://localhost:8080"
+dashboard = "http://localhost:3001"
+wallet = "http://localhost:3003"

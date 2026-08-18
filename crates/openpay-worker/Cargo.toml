@@ -1,0 +1,29 @@
+[package]
+name = "openpay-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Outbox processor, webhook delivery, SSRF guard, reconciliation"
+
+[dependencies]
+async-trait.workspace = true
+ipnet.workspace = true
+openpay-application.workspace = true
+openpay-config.workspace = true
+openpay-crypto.workspace = true
+openpay-domain.workspace = true
+openpay-observability.workspace = true
+openpay-connectors.workspace = true
+openpay-persistence.workspace = true
+metrics.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true

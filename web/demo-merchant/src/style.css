@@ -1,0 +1,63 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background: #1a2330;
+  color: #f3efe4;
+}
+
+body {
+  margin: 0;
+}
+
+.ticket {
+  max-width: 42rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  background: #f3efe4;
+  color: #1a2330;
+  box-shadow: 8px 8px 0 #c4493b;
+}
+
+.eyebrow {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: #1f7a6c;
+}
+
+.lede {
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+button {
+  background: #1a2330;
+  color: #f3efe4;
+  border: 0;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+.qr svg {
+  width: 220px;
+  height: 220px;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  overflow: auto;
+}
+
+a {
+  color: #1f7a6c;
+}

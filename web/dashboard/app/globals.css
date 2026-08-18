@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #f6f1e8;
+  color: #15232b;
+}
+
+.rail {
+  background-image: repeating-linear-gradient(
+    90deg,
+    #1f7a6c 0 12px,
+    transparent 12px 28px
+  );
+  height: 3px;
+}

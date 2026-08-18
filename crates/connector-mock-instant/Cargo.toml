@@ -1,0 +1,18 @@
+[package]
+name = "connector-mock-instant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Sandbox mock connector: success, decline, timeout, duplicate, unavailable"
+
+[dependencies]
+async-trait.workspace = true
+openpay-connectors.workspace = true
+openpay-domain.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

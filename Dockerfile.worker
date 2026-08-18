@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+FROM rust:1.85-bookworm AS builder
+WORKDIR /src
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates crates
+COPY bins bins
+COPY migrations migrations
+RUN cargo build --release -p openpay-worker-bin
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --uid 10001 openpay
+COPY --from=builder /src/target/release/openpay-worker /usr/local/bin/openpay-worker
+USER openpay
+HEALTHCHECK --interval=30s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8081/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/openpay-worker"]
