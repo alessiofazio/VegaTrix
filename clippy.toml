@@ -1,2 +1,1 @@
-[clippy]
 allow-unwrap-in-tests = true

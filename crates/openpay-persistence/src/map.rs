@@ -447,7 +447,7 @@ pub fn parse_payment_status(raw: &str) -> Result<PaymentStatus, RepositoryError>
     }
 }
 
-fn parse_attempt_status(raw: &str) -> Result<AttemptStatus, RepositoryError> {
+pub(crate) fn parse_attempt_status(raw: &str) -> Result<AttemptStatus, RepositoryError> {
     match raw {
         "CREATED" => Ok(AttemptStatus::Created),
         "REQUIRES_ACTION" => Ok(AttemptStatus::RequiresAction),

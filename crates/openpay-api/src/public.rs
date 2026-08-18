@@ -19,7 +19,7 @@ pub struct PublicQuery {
     pub token: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct AuthorizeBody {
     pub token: String,
     pub decision: String,
@@ -72,6 +72,14 @@ pub async fn public_get(
     })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/public/payments/{payment_id}/authorize",
+    tag = "public",
+    params(("payment_id" = String, Path, description = "Prefixed payment id")),
+    request_body = AuthorizeBody,
+    responses((status = 200, description = "Payer decision applied"), (status = 401), (status = 410))
+)]
 pub async fn public_authorize(
     State(state): State<Arc<AppState>>,
     Path(payment_id): Path<String>,

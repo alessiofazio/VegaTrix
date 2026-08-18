@@ -24,9 +24,9 @@ default-members = ["bins/openpay-server", "bins/openpay-worker", "bins/openpay-c
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "LicenseRef-OpenPay-SUL-Draft"
+license = "Apache-2.0"
 authors = ["OpenPay Protocol contributors"]
-repository = "https://github.com/openpay-protocol/openpay-protocol"
+repository = "https://github.com/alessiofazio/VegaTrix"
 rust-version = "1.85"
 
 [workspace.dependencies]

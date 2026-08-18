@@ -29,7 +29,9 @@ That file starts **postgres, redis, server, worker only** — no dashboard, demo
 - `API_BASE_URL` / `APP_BASE_URL` / `DASHBOARD_BASE_URL` / `WALLET_BASE_URL` are not `https://`
 - `--seed` or `openpay-cli seed` is used
 
-`/healthz` is liveness (process up). `/readyz` returns **HTTP 503** when the database is down.
+`/healthz` is liveness (process up). `/readyz` returns **HTTP 503** when the database is down. Docker `HEALTHCHECK` and k8s **readinessProbe** should hit `/readyz`. Use `/healthz` only as **livenessProbe**.
+
+Production compose also starts **Caddy** on `:80` / `:443` terminating TLS with Caddy's internal CA (browsers warn; this is not a public certificate). See `infra/caddy/README.md`. Direct `:8080` remains mapped for debug.
 
 ## External PostgreSQL / Redis
 
@@ -45,14 +47,17 @@ Use Docker secrets or a manager in production. Rotate `JWT_*`, `QR_SIGNING_SECRE
 
 ## TLS
 
-Terminate TLS at a reverse proxy (Caddy, nginx, Traefik). Set `API_BASE_URL` and `CORS_ALLOW_ORIGINS` to HTTPS origins. CORS is closed unless allowlisted.
+Production compose includes Caddy (`infra/caddy/Caddyfile`) with `tls internal`. That is a **local CA**, not a certificate from Let's Encrypt or another public CA. Browsers will warn until you replace the Caddyfile `tls` line with your own certs in `infra/caddy/certs/`. Set `API_BASE_URL` and `CORS_ALLOW_ORIGINS` to HTTPS origins. CORS is closed unless allowlisted.
 
 ## Health
 
-- API liveness: `GET /healthz` (process up)
-- API readiness: `GET /readyz` (HTTP 503 if Postgres is down)
+- API liveness: `GET /healthz` (process up) — k8s `livenessProbe`
+- API readiness: `GET /readyz` (HTTP 503 if Postgres is down) — k8s `readinessProbe` and Docker HEALTHCHECK
+- Worker: same paths on `WORKER_BIND_ADDR` (default `:8081`)
 - Postgres/Redis: compose healthchecks
 - Prometheus: `infra/prometheus/alerts.yml` when `TELEMETRY_OPT_IN=true` (scrape `METRICS_BIND_ADDR`, default `:9090`)
+
+Merchant `/v1` rate limits are per API key fingerprint or JWT tenant when Redis is up (`Retry-After: 60` on HTTP 429). If Redis is down, **production fail-closes** (HTTP 503); development fail-opens. Public wallet/QR routes stay IP-based and fail-open.
 
 ## Scaling
 
@@ -65,8 +70,8 @@ Run N API replicas behind the proxy. Run **one or few** workers; outbox uses `pu
 - [ ] `ENCRYPTION_MASTER_KEY` set (32 bytes or Base64 of 32 bytes)
 - [ ] PostgreSQL with backups (`infra/backup/`) and TLS
 - [ ] Webhook allowlist (hostnames only; private IPs still blocked unless Docker hostname is allowlisted)
-- [ ] Reverse proxy TLS; public URLs `https://`
-- [ ] `/readyz` wired as the orchestrator readiness probe
-- [ ] Legal review of license
+- [ ] Reverse proxy TLS; public URLs `https://` (compose Caddy uses an internal CA, not a public cert)
+- [ ] `/readyz` wired as the orchestrator readiness probe (`/healthz` for liveness)
+- [ ] Understand [Apache-2.0](../../LICENSE) obligations for your deployment
 - [ ] No claim of PCI/PSD2 compliance without assessment
 - [ ] Live connectors only with authorized providers (not in this repo)

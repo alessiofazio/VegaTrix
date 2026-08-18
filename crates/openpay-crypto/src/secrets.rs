@@ -13,6 +13,12 @@ pub fn generate_api_key() -> String {
     format!("opk_{}", hex::encode(bytes))
 }
 
+pub fn generate_webhook_secret() -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    format!("whsec_{}", hex::encode(bytes))
+}
+
 pub fn api_key_fingerprint(raw: &str) -> String {
     sha256_hex(raw.as_bytes())
 }

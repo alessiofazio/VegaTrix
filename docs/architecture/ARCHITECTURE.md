@@ -53,3 +53,7 @@ Every payment, attempt, webhook, and audit row is scoped by `tenant_id`. API key
 ## Connector pattern
 
 Business logic never imports a PSP SDK. It calls `PaymentConnector`. v1 ships `mock-instant`, `manual-test`, and a feature-gated open-banking stub that **does not** connect to a bank.
+
+Routing may retry a **bounded** list of next enabled connectors from the policy (`max_attempts`, allowed failure codes such as `TIMEOUT`). It does not pick a “cheapest rail”.
+
+Sandbox mock/manual attempt state is stored in PostgreSQL (`sandbox_connector_attempts`) so the API server and worker share decisions after restart. Connector `configuration_ref` values that look like `secret://` are wrapped with `ENCRYPTION_MASTER_KEY` as `enc:v1:` (AES-256-GCM), not a KMS.

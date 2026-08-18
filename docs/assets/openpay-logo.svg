@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="OpenPay Protocol">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="20" fill="#0f172a"/>
+  <circle cx="48" cy="48" r="28" fill="none" stroke="url(#g)" stroke-width="4"/>
+  <path d="M48 28 L48 48 L62 58" fill="none" stroke="#e2e8f0" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="28" cy="48" r="5" fill="#38bdf8"/>
+  <circle cx="68" cy="48" r="5" fill="#38bdf8"/>
+  <circle cx="48" cy="68" r="5" fill="#38bdf8"/>
+  <line x1="33" y1="48" x2="43" y2="48" stroke="#64748b" stroke-width="2"/>
+  <line x1="53" y1="48" x2="63" y2="48" stroke="#64748b" stroke-width="2"/>
+  <line x1="48" y1="53" x2="48" y2="63" stroke="#64748b" stroke-width="2"/>
+</svg>

@@ -1,3 +1,10 @@
+/**
+ * Thin HTTP wrapper for the OpenPay merchant API (v1 sandbox).
+ * No business logic — see docs/api/API-GUIDE.md.
+ *
+ * Auth: `Authorization: Bearer opk_…` (API key) or a JWT access token.
+ * Create requires header `Idempotency-Key`. JSON is snake_case; amounts are integer minor units.
+ */
 import { createHmac } from "node:crypto";
 
 export type CreatePaymentInput = {
@@ -20,10 +27,16 @@ export type Payment = {
   payment_url?: string;
   qr_payload?: string;
   qr_svg?: string;
-  expires_at?: string;
+  /** Unix seconds (`time` crate serde). Create also returns `created_at`, `replayed`. */
+  expires_at?: number | string;
 };
 
 export class OpenPay {
+  /**
+   * @param baseUrl e.g. `http://localhost:8080` (sandbox)
+   * @param apiKey merchant secret starting with `opk_` — demo:
+   *   `opk_demo_merchant_sandbox_not_for_production_use_only` (not for production)
+   */
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
@@ -74,6 +87,10 @@ export class OpenPay {
     return (await res.json()) as Payment;
   }
 
+  /**
+   * Verify `OpenPay-Signature: t=<unix>,v1=<hex>` over `{t}.{rawBody}` (HMAC-SHA256).
+   * Use the raw request body; default tolerance 300s (`WEBHOOK_TOLERANCE_SECS`).
+   */
   verifyWebhookSignature(secret: string, header: string, rawBody: string, toleranceSecs = 300): boolean {
     const parts = Object.fromEntries(header.split(",").map((p) => p.trim().split("=") as [string, string]));
     const t = parts.t;

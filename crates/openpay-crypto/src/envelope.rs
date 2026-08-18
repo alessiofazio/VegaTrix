@@ -77,13 +77,31 @@ pub fn decrypt_secret(master_key: &[u8; KEY_LEN], encoded: &str) -> Result<Vec<u
         .map_err(|_| CryptoError::Decryption)
 }
 
+/// Encrypt a connector `configuration_ref` if it is still plaintext.
+pub fn seal_if_plaintext(master_key: &[u8; KEY_LEN], value: &str) -> Result<String, CryptoError> {
+    if is_encrypted_envelope(value) {
+        return Ok(value.to_string());
+    }
+    encrypt_secret(master_key, value.as_bytes())
+}
+
+/// Decrypt `enc:v1:` envelopes; leave `secret://` and other plaintext refs as-is.
+pub fn open_secret_value(master_key: &[u8; KEY_LEN], value: &str) -> Result<String, CryptoError> {
+    if is_encrypted_envelope(value) {
+        let bytes = decrypt_secret(master_key, value)?;
+        String::from_utf8(bytes).map_err(|_| CryptoError::Malformed)
+    } else {
+        Ok(value.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn roundtrip_raw_32_byte_key() {
-        let key = decode_master_key("openpay-master-key-32-bytes!!ok").expect("key");
+        let key = decode_master_key("openpay-master-key-32-bytes-ok!!").expect("key");
         let enc = encrypt_secret(&key, b"psp-client-secret").expect("encrypt");
         assert!(is_encrypted_envelope(&enc));
         let dec = decrypt_secret(&key, &enc).expect("decrypt");
@@ -101,7 +119,7 @@ mod tests {
 
     #[test]
     fn tampered_ciphertext_fails() {
-        let key = decode_master_key("openpay-master-key-32-bytes!!ok").unwrap();
+        let key = decode_master_key("openpay-master-key-32-bytes-ok!!").unwrap();
         let mut enc = encrypt_secret(&key, b"payload").unwrap();
         enc.push('x');
         assert!(decrypt_secret(&key, &enc).is_err());
@@ -117,5 +135,21 @@ mod tests {
     fn secret_ref_detected() {
         assert!(is_secret_ref("secret://connectors/mock-instant"));
         assert!(!is_secret_ref("enc:v1:abc"));
+    }
+
+    #[test]
+    fn seal_plaintext_and_open_roundtrip() {
+        let key = decode_master_key("openpay-master-key-32-bytes-ok!!").unwrap();
+        let sealed = seal_if_plaintext(&key, "secret://connectors/mock-instant").unwrap();
+        assert!(is_encrypted_envelope(&sealed));
+        assert_eq!(
+            open_secret_value(&key, &sealed).unwrap(),
+            "secret://connectors/mock-instant"
+        );
+        assert_eq!(seal_if_plaintext(&key, &sealed).unwrap(), sealed);
+        assert_eq!(
+            open_secret_value(&key, "secret://plain").unwrap(),
+            "secret://plain"
+        );
     }
 }

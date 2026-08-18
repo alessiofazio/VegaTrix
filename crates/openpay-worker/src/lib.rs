@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Duration;
 
@@ -14,7 +15,9 @@ use openpay_application::{
 };
 use openpay_config::AppConfig;
 use openpay_connectors::ConnectorRegistry;
-use openpay_crypto::sign_webhook;
+use openpay_crypto::{
+    decode_master_key, is_encrypted_envelope, open_secret_value, sign_webhook,
+};
 use openpay_domain::{
     DeliveryStatus, EventId, WebhookDelivery, WebhookDeliveryId, WebhookEndpoint,
 };
@@ -38,6 +41,34 @@ const METADATA_HOSTS: &[&str] = &[
     "metadata.google.com",
     "169.254.169.254",
 ];
+
+pub const WEBHOOK_CIRCUIT_THRESHOLD: i32 = 20;
+pub const WEBHOOK_CIRCUIT_COOLDOWN_SECS: i64 = 60;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+/// After `WEBHOOK_CIRCUIT_THRESHOLD` failures the circuit opens. After cooldown it
+/// goes half-open so a single probe may be queued instead of skipping forever.
+pub fn webhook_circuit_state(
+    failure_count: i32,
+    last_updated: OffsetDateTime,
+    now: OffsetDateTime,
+) -> CircuitState {
+    if failure_count < WEBHOOK_CIRCUIT_THRESHOLD {
+        return CircuitState::Closed;
+    }
+    let elapsed = now - last_updated;
+    if elapsed >= TimeDuration::seconds(WEBHOOK_CIRCUIT_COOLDOWN_SECS) {
+        CircuitState::HalfOpen
+    } else {
+        CircuitState::Open
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebhookDnsPolicy {
@@ -201,6 +232,8 @@ impl WorkerRuntime {
         let pending = openpay_application::OutboxRepository::fetch_pending(&self.store, 50)
             .await
             .map_err(|e| e.to_string())?;
+        let mut half_open_probed: HashSet<openpay_domain::WebhookEndpointId> = HashSet::new();
+        let now = OffsetDateTime::now_utc();
         for record in pending {
             let merchant_id = record
                 .payload
@@ -220,9 +253,19 @@ impl WorkerRuntime {
                     {
                         continue;
                     }
-                    if endpoint.failure_count >= 20 {
-                        warn!(endpoint = %endpoint.url, "circuit open, skipping webhook");
-                        continue;
+                    match webhook_circuit_state(endpoint.failure_count, endpoint.updated_at, now) {
+                        CircuitState::Open => {
+                            warn!(endpoint = %endpoint.url, "circuit open, skipping webhook");
+                            continue;
+                        }
+                        CircuitState::HalfOpen => {
+                            if !half_open_probed.insert(endpoint.id) {
+                                continue;
+                            }
+                            info!(endpoint = %endpoint.url, "circuit half-open, allowing probe");
+                            metrics::counter!("openpay_webhook_circuit_probe").increment(1);
+                        }
+                        CircuitState::Closed => {}
                     }
                     let delivery = WebhookDelivery {
                         id: WebhookDeliveryId::new(),
@@ -298,23 +341,59 @@ impl WorkerRuntime {
         Ok(())
     }
 
+    async fn webhook_policy(&self, tenant_id: openpay_domain::TenantId) -> (u64, Vec<String>) {
+        let mut timeout = self.config.webhook_timeout_ms;
+        let mut allowlist = self.config.webhook_url_allowlist.clone();
+        if let Ok(Some(json)) = self.store.get_tenant_settings_json(tenant_id).await {
+            if let Some(n) = json.get("webhook_timeout_ms").and_then(|v| v.as_u64()) {
+                timeout = n;
+            }
+            if let Some(arr) = json.get("webhook_url_allowlist").and_then(|v| v.as_array()) {
+                allowlist = arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+        }
+        (timeout, allowlist)
+    }
+
+    fn resolve_webhook_secret(&self, endpoint: &WebhookEndpoint) -> Vec<u8> {
+        let refer = endpoint.signing_secret_ref.as_str();
+        if refer.starts_with("env:") || refer.is_empty() {
+            return self.config.webhook_signing_secret.as_bytes().to_vec();
+        }
+        if is_encrypted_envelope(refer) {
+            if let Ok(key) = decode_master_key(&self.config.encryption_master_key) {
+                if let Ok(plain) = open_secret_value(&key, refer) {
+                    if plain.starts_with("env:") {
+                        return self.config.webhook_signing_secret.as_bytes().to_vec();
+                    }
+                    return plain.into_bytes();
+                }
+            }
+        }
+        self.config.webhook_signing_secret.as_bytes().to_vec()
+    }
+
     async fn send_one(
         &self,
         endpoint: &WebhookEndpoint,
         payload: &Value,
     ) -> Result<u16, (String, Option<i32>)> {
-        if let Err(e) =
-            assert_safe_webhook_url(&endpoint.url, &self.config.webhook_url_allowlist).await
-        {
+        let (timeout_ms, allowlist) = self.webhook_policy(endpoint.tenant_id).await;
+        if let Err(e) = assert_safe_webhook_url(&endpoint.url, &allowlist).await {
             return Err((format!("ssrf:{e}"), None));
         }
         let body = serde_json::to_vec(payload).map_err(|e| (e.to_string(), None))?;
         let ts = OffsetDateTime::now_utc().unix_timestamp();
-        let sig = sign_webhook(self.config.webhook_signing_secret.as_bytes(), ts, &body)
-            .map_err(|e| (e.to_string(), None))?;
+        let secret = self.resolve_webhook_secret(endpoint);
+        let sig = sign_webhook(&secret, ts, &body).map_err(|e| (e.to_string(), None))?;
         let response = self
             .http
             .post(&endpoint.url)
+            .timeout(Duration::from_millis(timeout_ms.max(500)))
             .header("content-type", "application/json")
             .header("OpenPay-Signature", sig)
             .header(
@@ -437,5 +516,22 @@ mod tests {
         )
         .await
         .expect("allowlisted hostname may resolve loopback");
+    }
+
+    #[test]
+    fn circuit_half_open_after_cooldown() {
+        let now = OffsetDateTime::now_utc();
+        assert_eq!(webhook_circuit_state(0, now, now), CircuitState::Closed);
+        assert_eq!(webhook_circuit_state(19, now, now), CircuitState::Closed);
+        assert_eq!(webhook_circuit_state(20, now, now), CircuitState::Open);
+        let cooled = now - TimeDuration::seconds(WEBHOOK_CIRCUIT_COOLDOWN_SECS);
+        assert_eq!(
+            webhook_circuit_state(20, cooled, now),
+            CircuitState::HalfOpen
+        );
+        assert_eq!(
+            webhook_circuit_state(25, cooled, now),
+            CircuitState::HalfOpen
+        );
     }
 }

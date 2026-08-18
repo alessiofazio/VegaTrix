@@ -1,33 +1,33 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use openpay_connectors::{
     CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError,
     CreatePaymentAttemptInput, CreatePaymentAttemptOutput, GetPaymentAttemptInput,
-    ManualAttemptResolver, NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput,
-    RefundPaymentAttemptOutput,
+    ManualAttemptResolver, MemorySandboxStore, NormalizedAttemptStatus, PaymentConnector,
+    RefundPaymentAttemptInput, RefundPaymentAttemptOutput, SandboxAttemptStore,
 };
 use openpay_domain::{AttemptStatus, ConnectorCapabilities, ConnectorHealth, PaymentMethod};
 
-#[derive(Clone)]
-struct ManualAttempt {
-    status: AttemptStatus,
-}
-
 /// Completing a payment requires an explicit dashboard/admin action.
+///
+/// Decisions are stored in [`SandboxAttemptStore`] so server and worker agree
+/// after restart (in-memory only for unit tests).
 pub struct ManualTestConnector {
-    store: Arc<Mutex<HashMap<String, ManualAttempt>>>,
+    store: Arc<dyn SandboxAttemptStore>,
 }
 
 impl ManualTestConnector {
     pub fn new() -> Self {
         Self {
-            store: Arc::new(Mutex::new(HashMap::new())),
+            store: Arc::new(MemorySandboxStore::new()),
         }
+    }
+
+    pub fn with_store(store: Arc<dyn SandboxAttemptStore>) -> Self {
+        Self { store }
     }
 
     pub async fn resolve(
@@ -35,16 +35,23 @@ impl ManualTestConnector {
         provider_reference: &str,
         approve: bool,
     ) -> Result<(), ConnectorError> {
-        let mut store = self.store.lock().await;
-        let attempt = store
-            .get_mut(provider_reference)
+        let current = self
+            .store
+            .get(self.key(), provider_reference)
+            .await?
             .ok_or_else(|| ConnectorError::Message("unknown reference".into()))?;
-        attempt.status = if approve {
+        if matches!(
+            current,
+            AttemptStatus::Settled | AttemptStatus::Failed | AttemptStatus::Cancelled
+        ) {
+            return Ok(());
+        }
+        let status = if approve {
             AttemptStatus::Settled
         } else {
             AttemptStatus::Failed
         };
-        Ok(())
+        self.store.put(self.key(), provider_reference, status).await
     }
 }
 
@@ -86,12 +93,13 @@ impl PaymentConnector for ManualTestConnector {
         _input: CreatePaymentAttemptInput,
     ) -> Result<CreatePaymentAttemptOutput, ConnectorError> {
         let provider_reference = format!("man_{}", Uuid::now_v7().as_simple());
-        self.store.lock().await.insert(
-            provider_reference.clone(),
-            ManualAttempt {
-                status: AttemptStatus::RequiresAction,
-            },
-        );
+        self.store
+            .put(
+                self.key(),
+                &provider_reference,
+                AttemptStatus::RequiresAction,
+            )
+            .await?;
         Ok(CreatePaymentAttemptOutput {
             provider_reference,
             status: AttemptStatus::RequiresAction,
@@ -104,13 +112,14 @@ impl PaymentConnector for ManualTestConnector {
         &self,
         input: GetPaymentAttemptInput,
     ) -> Result<NormalizedAttemptStatus, ConnectorError> {
-        let store = self.store.lock().await;
-        let stored = store
-            .get(&input.provider_reference)
+        let stored = self
+            .store
+            .get(self.key(), &input.provider_reference)
+            .await?
             .ok_or_else(|| ConnectorError::Message("unknown reference".into()))?;
         Ok(NormalizedAttemptStatus {
             provider_reference: input.provider_reference,
-            status: stored.status,
+            status: stored,
         })
     }
 
@@ -118,9 +127,19 @@ impl PaymentConnector for ManualTestConnector {
         &self,
         input: CancelPaymentAttemptInput,
     ) -> Result<CancelPaymentAttemptOutput, ConnectorError> {
-        let mut store = self.store.lock().await;
-        if let Some(stored) = store.get_mut(&input.provider_reference) {
-            stored.status = AttemptStatus::Cancelled;
+        if self
+            .store
+            .get(self.key(), &input.provider_reference)
+            .await?
+            .is_some()
+        {
+            self.store
+                .put(
+                    self.key(),
+                    &input.provider_reference,
+                    AttemptStatus::Cancelled,
+                )
+                .await?;
             return Ok(CancelPaymentAttemptOutput {
                 status: AttemptStatus::Cancelled,
             });
@@ -136,5 +155,37 @@ impl PaymentConnector for ManualTestConnector {
             status: AttemptStatus::Settled,
             provider_reference: format!("refund_{}", input.provider_reference),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openpay_domain::{AmountMinor, Currency, PaymentId, PaymentMethod};
+
+    #[tokio::test]
+    async fn resolve_is_visible_to_a_new_instance() {
+        let store: Arc<dyn SandboxAttemptStore> = Arc::new(MemorySandboxStore::new());
+        let a = ManualTestConnector::with_store(store.clone());
+        let out = a
+            .create_attempt(CreatePaymentAttemptInput {
+                payment_id: PaymentId::new(),
+                amount_minor: AmountMinor::new(1200).unwrap(),
+                currency: Currency::EUR,
+                method: PaymentMethod::Manual,
+                scenario: None,
+                idempotency_key: "m1".into(),
+            })
+            .await
+            .unwrap();
+        let b = ManualTestConnector::with_store(store);
+        b.resolve(&out.provider_reference, true).await.unwrap();
+        let fetched = a
+            .fetch_attempt(GetPaymentAttemptInput {
+                provider_reference: out.provider_reference,
+            })
+            .await
+            .unwrap();
+        assert_eq!(fetched.status, AttemptStatus::Settled);
     }
 }

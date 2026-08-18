@@ -3,7 +3,9 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use openpay_crypto::{api_key_fingerprint, hash_secret};
+use openpay_crypto::{
+    api_key_fingerprint, decode_master_key, hash_secret, is_encrypted_envelope, seal_if_plaintext,
+};
 
 pub const DEMO_TENANT: Uuid = Uuid::from_bytes([
     0x01, 0x90, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -121,7 +123,7 @@ pub async fn seed_demo(pool: &PgPool, merchant_webhook_url: &str) -> Result<(), 
     .bind("Mock Instant Rail")
     .bind("mock_instant")
     .bind("enabled")
-    .bind("secret://connectors/mock-instant")
+    .bind(sealed_configuration_ref("secret://connectors/mock-instant"))
     .bind(&mock_caps)
     .bind(100)
     .bind("HEALTHY")
@@ -148,7 +150,7 @@ pub async fn seed_demo(pool: &PgPool, merchant_webhook_url: &str) -> Result<(), 
     .bind("Manual Test")
     .bind("manual_test")
     .bind("enabled")
-    .bind("secret://connectors/manual-test")
+    .bind(sealed_configuration_ref("secret://connectors/manual-test"))
     .bind(&manual_caps)
     .bind(10)
     .bind("HEALTHY")
@@ -207,4 +209,17 @@ pub async fn seed_demo(pool: &PgPool, merchant_webhook_url: &str) -> Result<(), 
     .await?;
 
     Ok(())
+}
+
+fn sealed_configuration_ref(raw: &str) -> String {
+    if is_encrypted_envelope(raw) {
+        return raw.to_string();
+    }
+    match std::env::var("ENCRYPTION_MASTER_KEY") {
+        Ok(k) => match decode_master_key(&k) {
+            Ok(key) => seal_if_plaintext(&key, raw).unwrap_or_else(|_| raw.to_string()),
+            Err(_) => raw.to_string(),
+        },
+        Err(_) => raw.to_string(),
+    }
 }

@@ -1908,6 +1908,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "tokio",
  "tracing",
 ]
 
@@ -1959,6 +1960,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "openpay-application",
+ "openpay-connectors",
  "openpay-crypto",
  "openpay-domain",
  "serde",
@@ -2049,6 +2051,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "connector-manual-test",
  "connector-mock-instant",
  "openpay-config",
  "openpay-connectors",

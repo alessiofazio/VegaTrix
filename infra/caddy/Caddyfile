@@ -1,0 +1,13 @@
+{
+	# Local/prod-like TLS terminator. Not a public CA certificate.
+	admin off
+}
+
+:80 {
+	reverse_proxy server:8080
+}
+
+:443 {
+	tls internal
+	reverse_proxy server:8080
+}

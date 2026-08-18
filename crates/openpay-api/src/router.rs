@@ -6,7 +6,8 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::middleware;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::http::request::Parts;
+use axum::routing::{get, patch, post};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -18,7 +19,8 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::auth::{login, refresh};
 use crate::dto::{CreatePaymentBody, PaymentCreatedResponse, PaymentView};
 use crate::error::ProblemDetails;
-use crate::middleware::{rate_limit, track_http_metrics};
+use crate::middleware::{rate_limit, rate_limit_authenticated, track_http_metrics};
+use crate::public::AuthorizeBody;
 use crate::state::AppState;
 
 #[derive(OpenApi)]
@@ -26,14 +28,28 @@ use crate::state::AppState;
     paths(
         crate::merchant::create_payment,
         crate::merchant::get_payment,
+        crate::auth::login,
+        crate::auth::refresh,
+        crate::public::public_authorize,
+        crate::admin::reconcile_payment_admin,
         health,
         ready
     ),
-    components(schemas(CreatePaymentBody, PaymentCreatedResponse, PaymentView, ProblemDetails)),
+    components(schemas(
+        CreatePaymentBody,
+        PaymentCreatedResponse,
+        PaymentView,
+        ProblemDetails,
+        crate::auth::LoginRequest,
+        crate::auth::RefreshRequest,
+        crate::auth::TokenResponse,
+        AuthorizeBody
+    )),
     tags(
         (name = "merchant", description = "Merchant payment API"),
         (name = "admin", description = "Administrative API"),
-        (name = "public", description = "QR / wallet public API")
+        (name = "public", description = "QR / wallet public API"),
+        (name = "auth", description = "JWT login and refresh")
     ),
     info(title = "OpenPay Protocol API", version = "0.1.0")
 )]
@@ -68,25 +84,29 @@ async fn ready(
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    let cors = if state.config.cors_allow_origins.is_empty() {
-        CorsLayer::new()
-            .allow_origin(AllowOrigin::exact(HeaderValue::from_static(
-                "http://localhost:3002",
-            )))
-            .allow_headers(tower_http::cors::Any)
-            .allow_methods(tower_http::cors::Any)
-    } else {
-        let origins: Vec<HeaderValue> = state
-            .config
-            .cors_allow_origins
-            .iter()
-            .filter_map(|o| o.parse().ok())
-            .collect();
-        CorsLayer::new()
-            .allow_origin(AllowOrigin::list(origins))
-            .allow_headers(tower_http::cors::Any)
-            .allow_methods(tower_http::cors::Any)
-    };
+    let operator = state.operator.clone();
+    let env_origins = state.config.cors_allow_origins.clone();
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(
+            move |origin: &HeaderValue, _parts: &Parts| {
+                let Ok(origin_str) = origin.to_str() else {
+                    return false;
+                };
+                let locked = operator.read().ok();
+                let list = locked
+                    .as_ref()
+                    .map(|s| s.cors_allow_origins.as_slice())
+                    .unwrap_or(env_origins.as_slice());
+                if list.is_empty() {
+                    return origin_str == "http://localhost:3001"
+                        || origin_str == "http://localhost:3002"
+                        || origin_str == "http://localhost:3003";
+                }
+                list.iter().any(|allowed| allowed == origin_str)
+            },
+        ))
+        .allow_headers(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any);
 
     let x_request_id = HeaderName::from_static("x-request-id");
 
@@ -114,16 +134,42 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/payment-requests/{payment_id}/events",
             get(crate::merchant::list_events),
-        );
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_authenticated,
+        ));
 
     let admin = Router::new()
         .route("/overview", get(crate::admin::overview))
         .route("/connectors", get(crate::admin::connectors))
-        .route("/settings", get(crate::admin::settings))
-        .route("/api-keys", get(crate::admin::list_api_keys))
+        .route(
+            "/connectors/{key}",
+            patch(crate::admin::update_connector),
+        )
+        .route(
+            "/settings",
+            get(crate::admin::settings).patch(crate::admin::update_settings),
+        )
+        .route(
+            "/api-keys",
+            get(crate::admin::list_api_keys).post(crate::admin::create_api_key),
+        )
+        .route(
+            "/api-keys/{key_id}/revoke",
+            post(crate::admin::revoke_api_key),
+        )
         .route(
             "/webhook-endpoints",
-            get(crate::admin::list_webhook_endpoints),
+            get(crate::admin::list_webhook_endpoints).post(crate::admin::create_webhook_endpoint),
+        )
+        .route(
+            "/webhook-endpoints/{endpoint_id}",
+            patch(crate::admin::update_webhook_endpoint),
+        )
+        .route(
+            "/webhook-endpoints/{endpoint_id}/rotate-secret",
+            post(crate::admin::rotate_webhook_secret),
         )
         .route(
             "/webhook-deliveries",
@@ -132,6 +178,23 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/routing-policies",
             get(crate::admin::list_routing_policies),
+        )
+        .route(
+            "/routing-policies/{policy_id}",
+            patch(crate::admin::update_routing_policy),
+        )
+        .route("/sandbox", get(crate::sandbox::sandbox_status))
+        .route(
+            "/sandbox/payments",
+            post(crate::sandbox::create_sandbox_payment),
+        )
+        .route(
+            "/sandbox/payments/{payment_id}/authorize",
+            post(crate::sandbox::sandbox_authorize),
+        )
+        .route(
+            "/sandbox/payments/{payment_id}/duplicate",
+            post(crate::sandbox::sandbox_duplicate),
         )
         .route(
             "/payments/{payment_id}/reconcile",

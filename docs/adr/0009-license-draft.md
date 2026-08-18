@@ -1,3 +1,3 @@
-# ADR 0009 — Draft sustainable-use license
+# ADR 0009 — License
 
-Accepted as **draft only**. Counsel must rewrite before a public launch. Intent: internal self-host allowed; competing hosted service and white-label require a commercial deal.
+**Superseded.** The project previously considered a draft sustainable-use license. As of 2026-08-18 the canonical license is [Apache License 2.0](../../LICENSE) at the author's request.

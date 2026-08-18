@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work?
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Area
+      options:
+        - label: API / protocol
+        - label: Connector
+        - label: Dashboard / demo UI
+        - label: Documentation
+        - label: Deployment / Docker

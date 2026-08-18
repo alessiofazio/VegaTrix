@@ -13,5 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && useradd --system --create-home --uid 10001 openpay
 COPY --from=builder /src/target/release/openpay-worker /usr/local/bin/openpay-worker
 USER openpay
-HEALTHCHECK --interval=30s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8081/healthz || exit 1
+# k8s: livenessProbe=/healthz (process), readinessProbe=/readyz (Postgres).
+HEALTHCHECK --interval=30s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8081/readyz || exit 1
 ENTRYPOINT ["/usr/local/bin/openpay-worker"]

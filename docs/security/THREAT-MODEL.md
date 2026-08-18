@@ -7,7 +7,7 @@
 | QR replay | Short-lived HMAC token bound to payment/tenant/merchant; nonce table | Stolen token valid until expiry if unused |
 | API key leakage | Keys hashed (Argon2id); fingerprint lookup; shown once in seed docs | Demo key is public by design |
 | Cross-tenant leakage | `tenant_id` on queries and auth context | Bugs in new queries |
-| Connector compromise | Secrets by reference; sandbox_only flags; normalized errors | A future live connector enlarges blast radius |
+| Connector compromise | Secrets by reference, encrypted at rest as `enc:v1:` when a master key is set; sandbox_only flags; normalized errors | A future live connector enlarges blast radius |
 | Delayed callback | Duplicate callbacks map to same state; version lock | Ambiguous timeout stays `PROCESSING` until reconcile |
 | Ambiguous outcome | `AttemptStatus::Ambiguous` → payment `PROCESSING` | Operator must reconcile |
 | Privilege escalation | RBAC admin vs merchant API key | Demo admin password is documented |

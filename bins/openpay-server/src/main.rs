@@ -8,9 +8,11 @@ use connector_mock_instant::MockInstantConnector;
 use connector_open_banking_stub::OpenBankingStubConnector;
 use openpay_api::{AppState, connectors::ConnectorRuntime, router};
 use openpay_config::AppConfig;
-use openpay_connectors::ConnectorRegistry;
+use openpay_connectors::{ConnectorRegistry, SandboxAttemptStore};
 use openpay_observability::init_tracing;
-use openpay_persistence::{PgStore, connect, migrate, seed::seed_demo};
+use openpay_persistence::{
+    PgStore, connect, maybe_encrypt_connector_refs, migrate, seed::seed_demo,
+};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -47,11 +49,14 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let store = PgStore::new(pool);
+    maybe_encrypt_connector_refs(&store, &config.encryption_master_key).await;
+
+    let sandbox: Arc<dyn SandboxAttemptStore> = Arc::new(store.clone());
     let mut registry = ConnectorRegistry::new();
     let mut manual: Option<Arc<dyn openpay_connectors::ManualAttemptResolver>> = None;
     if config.features.connector_mock {
-        registry.register(Arc::new(MockInstantConnector::new()));
-        let m = Arc::new(ManualTestConnector::new());
+        registry.register(Arc::new(MockInstantConnector::with_store(sandbox.clone())));
+        let m = Arc::new(ManualTestConnector::with_store(sandbox));
         registry.register(m.clone());
         manual = Some(m);
     }
@@ -71,7 +76,11 @@ async fn main() -> anyhow::Result<()> {
         Ok(client) => match redis::aio::ConnectionManager::new(client).await {
             Ok(mgr) => Some(mgr),
             Err(err) => {
-                tracing::warn!(error = %err, "redis unavailable, rate limiting disabled");
+                if config.is_production() {
+                    tracing::error!(error = %err, "redis unavailable; merchant rate limit will fail closed");
+                } else {
+                    tracing::warn!(error = %err, "redis unavailable, public rate limiting fail-open");
+                }
                 None
             }
         },
@@ -81,7 +90,8 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let state = AppState::new(config.clone(), store, runtime, redis);
+    let operator = openpay_api::state::load_operator_settings(&store, &config).await;
+    let state = AppState::new(config.clone(), store, runtime, redis, operator);
     let app = router(state);
     let addr: SocketAddr = config.bind_addr.parse().context("bind addr")?;
     tracing::info!(%addr, "openpay-server listening");

@@ -25,7 +25,7 @@ pub struct AuthContext {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct JwtClaims {
+pub(crate) struct JwtClaims {
     sub: String,
     tenant_id: String,
     role: String,
@@ -87,7 +87,7 @@ pub fn issue_tokens(
     Ok((access_jwt, refresh_jwt))
 }
 
-pub fn decode_refresh(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
+pub(crate) fn decode_refresh(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
     let data = decode::<JwtClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
@@ -112,7 +112,7 @@ pub fn decode_refresh(secret: &str, token: &str) -> Result<JwtClaims, ApiError> 
     Ok(data.claims)
 }
 
-pub fn decode_access(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
+pub(crate) fn decode_access(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
     let data = decode::<JwtClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
@@ -135,6 +135,10 @@ pub fn decode_access(secret: &str, token: &str) -> Result<JwtClaims, ApiError> {
         ));
     }
     Ok(data.claims)
+}
+
+pub fn tenant_id_from_access_token(secret: &str, token: &str) -> Option<String> {
+    decode_access(secret, token).ok().map(|c| c.tenant_id)
 }
 
 impl FromRequestParts<Arc<AppState>> for AuthContext {
@@ -181,7 +185,7 @@ pub fn scopes_for_role(role: &str) -> Vec<String> {
     match role.trim().to_ascii_lowercase().as_str() {
         "admin" => vec!["admin".into()],
         "merchant" => vec!["merchant".into()],
-        other if other.is_empty() => Vec::new(),
+        "" => Vec::new(),
         other => vec![other.to_string()],
     }
 }
@@ -225,7 +229,7 @@ async fn authenticate_api_key(store: &PgStore, token: &str) -> Result<AuthContex
     })
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
@@ -241,11 +245,18 @@ pub struct TokenResponse {
     pub self_hosted: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses((status = 200, description = "New tokens", body = TokenResponse), (status = 401, body = crate::error::ProblemDetails))
+)]
 pub async fn refresh(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     axum::Json(body): axum::Json<RefreshRequest>,
@@ -272,6 +283,13 @@ pub async fn refresh(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses((status = 200, description = "JWT pair", body = TokenResponse), (status = 401, body = crate::error::ProblemDetails))
+)]
 pub async fn login(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     axum::Json(body): axum::Json<LoginRequest>,

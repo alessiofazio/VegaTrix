@@ -1,16 +1,9 @@
-# Commercial license (draft)
+# Commercial licensing
 
-**NOT LEGAL ADVICE — MUST BE REVIEWED BY QUALIFIED COUNSEL BEFORE PUBLIC RELEASE.**
+OpenPay Protocol is released under the [Apache License 2.0](LICENSE).
 
-A commercial agreement is required when you want to:
+No separate commercial license is required to use, modify, or distribute this software under the terms of Apache-2.0.
 
-- host OpenPay for third parties (SaaS, managed MSP, marketplace tenancy);
-- white-label or rebrand the product;
-- embed OpenPay in a product you sell to other businesses;
-- ship or operate **official production connectors** maintained as a service;
-- obtain enterprise support, SLA, or private-cloud packaging;
-- use the OpenPay name, logo, or certification marks.
+A previous draft Sustainable Use License was superseded by Apache-2.0 at the author's request.
 
-Community self-hosting for **your own** payments (your company, your till, your shop) does not by itself require this agreement, but live rails still need PSP/bank contracts and compliance work.
-
-Contact the rights holder for a commercial quote. Until a signed agreement exists, the draft Sustainable Use License in `LICENSE` applies.
+Trademarks (OpenPay name, logos, “Compatible with OpenPay” badges) are **not** granted by the Apache license. Contact the maintainers for trademark questions.

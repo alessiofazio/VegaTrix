@@ -15,6 +15,7 @@ anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
 connector-mock-instant.workspace = true
+connector-manual-test.workspace = true
 openpay-config.workspace = true
 openpay-connectors.workspace = true
 openpay-observability.workspace = true

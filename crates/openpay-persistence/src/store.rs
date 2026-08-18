@@ -750,7 +750,7 @@ impl RoutingRepository for PgStore {
         tenant_id: TenantId,
     ) -> Result<Option<RoutingPolicy>, RepositoryError> {
         let row: Option<PolicyRow> = sqlx::query_as(
-            "SELECT * FROM routing_policies WHERE tenant_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM routing_policies WHERE tenant_id = $1 AND status = 'active' ORDER BY updated_at DESC, created_at DESC LIMIT 1",
         )
         .bind(tenant_id.as_uuid())
         .fetch_optional(&self.pool)
@@ -900,5 +900,39 @@ impl PgStore {
         .await
         .map_err(infra)?;
         Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    /// Encrypt plaintext `secret://` (and `env:`) connector refs at rest with AES-256-GCM.
+    pub async fn encrypt_connector_secret_refs(
+        &self,
+        master_key: &[u8; 32],
+    ) -> Result<u32, RepositoryError> {
+        let rows: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, configuration_ref FROM connectors")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(infra)?;
+        let mut n = 0u32;
+        for (id, refer) in rows {
+            if openpay_crypto::is_encrypted_envelope(&refer) {
+                continue;
+            }
+            if !openpay_crypto::is_secret_ref(&refer) && !refer.starts_with("env:") {
+                continue;
+            }
+            let sealed = openpay_crypto::seal_if_plaintext(master_key, &refer)
+                .map_err(|e| RepositoryError::Infra(e.to_string()))?;
+            sqlx::query(
+                "UPDATE connectors SET configuration_ref = $1, updated_at = $2 WHERE id = $3",
+            )
+            .bind(&sealed)
+            .bind(OffsetDateTime::now_utc())
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(infra)?;
+            n += 1;
+        }
+        Ok(n)
     }
 }

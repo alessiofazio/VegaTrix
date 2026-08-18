@@ -1,7 +1,7 @@
 //! Integration-style tests for authorize idempotency and fingerprint stability.
 
 use openpay_application::fingerprint_for_test;
-use openpay_domain::{AmountMinor, Currency, PaymentStatus};
+use openpay_domain::{AmountMinor, PaymentStatus};
 
 #[test]
 fn fingerprint_is_stable() {

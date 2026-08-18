@@ -51,10 +51,10 @@ impl OpenPayClient {
                 body: String::from_utf8_lossy(&bytes).into(),
             });
         }
-        Ok(serde_json::from_slice(&bytes).map_err(|e| SdkError::Api {
+        serde_json::from_slice(&bytes).map_err(|e| SdkError::Api {
             status: 0,
             body: e.to_string(),
-        })?)
+        })
     }
 
     pub async fn get_payment(&self, payment_id: &str) -> Result<CreatePaymentResponse, SdkError> {
@@ -70,10 +70,10 @@ impl OpenPayClient {
                 body: String::from_utf8_lossy(&bytes).into(),
             });
         }
-        Ok(serde_json::from_slice(&bytes).map_err(|e| SdkError::Api {
+        serde_json::from_slice(&bytes).map_err(|e| SdkError::Api {
             status: 0,
             body: e.to_string(),
-        })?)
+        })
     }
 }
 

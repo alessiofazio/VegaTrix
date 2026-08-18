@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import ConfigDesk from "@/components/ConfigDesk";
+import SandboxLab from "@/components/SandboxLab";
+import { API, api, errorDetail } from "@/lib/api";
 
 const STATIONS = ["PENDING", "PROCESSING", "SETTLED", "FAILED", "REQUIRES_ACTION"];
+
+type Tab = "binari" | "laboratorio" | "config";
 
 type Overview = {
   edition: string;
@@ -35,11 +38,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
-
-  const authHeaders = useCallback(
-    () => ({ Authorization: `Bearer ${token}`, "content-type": "application/json" }),
-    [token],
-  );
+  const [tab, setTab] = useState<Tab>("binari");
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -51,7 +50,7 @@ export default function Page() {
     });
     const body = await res.json();
     if (!res.ok) {
-      setError(body.detail ?? "Login failed");
+      setError(body.detail ?? "Accesso non riuscito");
       return;
     }
     setToken(body.access_token);
@@ -59,9 +58,9 @@ export default function Page() {
 
   const refreshOverview = useCallback(async () => {
     if (!token) return;
-    const res = await fetch(`${API}/v1/admin/overview`, { headers: authHeaders() });
-    setData(await res.json());
-  }, [token, authHeaders]);
+    const res = await api<Overview>("/v1/admin/overview", token);
+    if (res.ok) setData(res.body);
+  }, [token]);
 
   useEffect(() => {
     void refreshOverview();
@@ -73,28 +72,33 @@ export default function Page() {
     if (!token) return;
     setSelected(id);
     const [pay, events, attempts, deliveries] = await Promise.all([
-      fetch(`${API}/v1/payment-requests/${id}`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/v1/payment-requests/${id}/events`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/v1/payment-requests/${id}/attempts`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/v1/admin/webhook-deliveries`, { headers: authHeaders() }).then((r) => r.json()),
+      api<Record<string, unknown>>(`/v1/payment-requests/${id}`, token),
+      api<unknown[]>(`/v1/payment-requests/${id}/events`, token),
+      api<Detail["attempts"]>(`/v1/payment-requests/${id}/attempts`, token),
+      api<unknown[]>("/v1/admin/webhook-deliveries", token),
     ]);
-    setDetail({ pay, events, attempts, deliveries });
+    setDetail({
+      pay: pay.body,
+      events: events.body,
+      attempts: Array.isArray(attempts.body) ? attempts.body : [],
+      deliveries: deliveries.body,
+    });
   }
 
   async function reconcile(id: string) {
     if (!token) return;
-    await fetch(`${API}/v1/admin/payments/${id}/reconcile`, { method: "POST", headers: authHeaders() });
+    await api(`/v1/admin/payments/${id}/reconcile`, token, { method: "POST" });
     await openPayment(id);
     await refreshOverview();
   }
 
   async function resolveAttempt(attemptId: string, approve: boolean) {
     if (!token) return;
-    await fetch(`${API}/v1/admin/attempts/${attemptId}/resolve`, {
+    const res = await api(`/v1/admin/attempts/${attemptId}/resolve`, token, {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify({ approve }),
     });
+    if (!res.ok) setError(errorDetail(res.body));
     if (selected) await openPayment(selected);
     await refreshOverview();
   }
@@ -103,8 +107,10 @@ export default function Page() {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
         <p className="text-xs uppercase tracking-[0.2em] text-rail">OpenPay Protocol · sandbox</p>
-        <h1 className="mt-3 text-4xl font-semibold">Clearing desk</h1>
-        <p className="mt-2 text-ledger">Sign in to inspect payment rails, attempts, and audit stations.</p>
+        <h1 className="mt-3 text-4xl font-semibold">Desk operatore</h1>
+        <p className="mt-2 text-ledger">
+          Accedi per configurare chiavi, webhook, routing e connettori, e per lanciare prove dal laboratorio.
+        </p>
         <form onSubmit={login} className="mt-8 space-y-4 rounded-sm border border-ink/10 bg-white p-6">
           <label className="block text-sm">
             Email
@@ -115,7 +121,9 @@ export default function Page() {
             <input type="password" className="mt-1 w-full border border-ink/20 px-3 py-2" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
           {error && <p className="text-sm text-signal">{error}</p>}
-          <button type="submit" className="w-full bg-ink px-4 py-2 text-ticket">Enter desk</button>
+          <button type="submit" className="w-full bg-ink px-4 py-2 text-ticket">
+            Entra nel desk
+          </button>
         </form>
       </main>
     );
@@ -128,80 +136,123 @@ export default function Page() {
           <p className="text-xs uppercase tracking-[0.2em] text-rail">
             {data?.self_hosted ? "self-hosted" : "cloud"} · {data?.edition}
           </p>
-          <h1 className="text-3xl font-semibold">Payment rails</h1>
+          <h1 className="text-3xl font-semibold">Desk di controllo</h1>
         </div>
-        <button type="button" className="text-sm underline" onClick={() => setToken(null)}>Sign out</button>
+        <button type="button" className="text-sm underline" onClick={() => setToken(null)}>
+          Esci
+        </button>
       </header>
       <div className="rail mt-4" />
-      <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-        {STATIONS.map((s) => (
-          <article key={s} className="border border-ink/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-widest text-ledger">{s}</p>
-            <p className="font-mono text-3xl">{data?.payment_counts?.[s] ?? 0}</p>
-          </article>
+      <nav className="mt-6 flex flex-wrap gap-2 text-sm">
+        {(
+          [
+            ["binari", "Binari"],
+            ["laboratorio", "Laboratorio"],
+            ["config", "Configurazione"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`border px-3 py-1 ${tab === id ? "border-ink bg-ink text-ticket" : "border-ink/20 bg-white"}`}
+          >
+            {label}
+          </button>
         ))}
-      </section>
-      <section className="mt-8 grid gap-6 md:grid-cols-2">
-        <div className="border border-ink/10 bg-white">
-          <h2 className="border-b border-ink/10 px-4 py-3 text-sm uppercase tracking-widest">Requests</h2>
-          <ul>
-            {(data?.payments ?? []).map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => openPayment(p.id)}
-                  className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-paper ${selected === p.id ? "bg-paper" : ""}`}
-                >
-                  <span className="font-mono text-sm">{p.merchant_order_id}</span>
-                  <span className="font-mono text-sm">{(p.amount_minor / 100).toFixed(2)} {p.currency}</span>
-                  <span className="text-xs uppercase text-rail">{p.status}</span>
-                </button>
-              </li>
+      </nav>
+
+      {tab === "binari" && (
+        <>
+          <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+            {STATIONS.map((s) => (
+              <article key={s} className="border border-ink/10 bg-white p-4">
+                <p className="text-xs uppercase tracking-widest text-ledger">{s}</p>
+                <p className="font-mono text-3xl">{data?.payment_counts?.[s] ?? 0}</p>
+              </article>
             ))}
-          </ul>
-        </div>
-        <div className="border border-ink/10 bg-white">
-          <h2 className="border-b border-ink/10 px-4 py-3 text-sm uppercase tracking-widest">Station record</h2>
-          {!detail ? (
-            <p className="p-4 text-sm text-ledger">Select a payment to inspect audit, attempts, and webhooks.</p>
-          ) : (
-            <div className="space-y-4 p-4 text-sm">
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="border border-ink px-3 py-1" onClick={() => reconcile(String(detail.pay.id))}>
-                  Reconcile
-                </button>
-              </div>
-              <p>
-                <strong>Status:</strong> {String(detail.pay.status)}
-              </p>
-              <div>
-                <strong>Attempts</strong>
-                <ul className="mt-1 space-y-1">
-                  {detail.attempts.map((a) => (
-                    <li key={a.id} className="font-mono text-xs">
-                      {a.connector_key} · {a.status}
-                      {a.status === "REQUIRES_ACTION" && (
-                        <span className="ml-2 space-x-1">
-                          <button type="button" className="underline" onClick={() => resolveAttempt(a.id, true)}>Approve</button>
-                          <button type="button" className="underline" onClick={() => resolveAttempt(a.id, false)}>Reject</button>
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <strong>Audit timeline</strong>
-                <pre className="mt-1 max-h-40 overflow-auto font-mono text-xs">{JSON.stringify(detail.events, null, 2)}</pre>
-              </div>
-              <div>
-                <strong>Webhook deliveries</strong>
-                <pre className="mt-1 max-h-32 overflow-auto font-mono text-xs">{JSON.stringify(detail.deliveries, null, 2)}</pre>
-              </div>
+          </section>
+          <section className="mt-8 grid gap-6 md:grid-cols-2">
+            <div className="border border-ink/10 bg-white">
+              <h2 className="border-b border-ink/10 px-4 py-3 text-sm uppercase tracking-widest">Richieste</h2>
+              <ul>
+                {(data?.payments ?? []).map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openPayment(p.id)}
+                      className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-paper ${selected === p.id ? "bg-paper" : ""}`}
+                    >
+                      <span className="font-mono text-sm">{p.merchant_order_id}</span>
+                      <span className="font-mono text-sm">
+                        {(p.amount_minor / 100).toFixed(2)} {p.currency}
+                      </span>
+                      <span className="text-xs uppercase text-rail">{p.status}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
-          )}
+            <div className="border border-ink/10 bg-white">
+              <h2 className="border-b border-ink/10 px-4 py-3 text-sm uppercase tracking-widest">Scheda stazione</h2>
+              {!detail ? (
+                <p className="p-4 text-sm text-ledger">Seleziona un pagamento per audit, attempt e webhook.</p>
+              ) : (
+                <div className="space-y-4 p-4 text-sm">
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="border border-ink px-3 py-1" onClick={() => void reconcile(String(detail.pay.id))}>
+                      Reconcile
+                    </button>
+                  </div>
+                  <p>
+                    <strong>Stato:</strong> {String(detail.pay.status)}
+                  </p>
+                  <div>
+                    <strong>Attempt</strong>
+                    <ul className="mt-1 space-y-1">
+                      {detail.attempts.map((a) => (
+                        <li key={a.id} className="font-mono text-xs">
+                          {a.connector_key} · {a.status}
+                          {a.status === "REQUIRES_ACTION" && (
+                            <span className="ml-2 space-x-1 font-sans">
+                              <button type="button" className="underline" onClick={() => void resolveAttempt(a.id, true)}>
+                                Approva
+                              </button>
+                              <button type="button" className="underline" onClick={() => void resolveAttempt(a.id, false)}>
+                                Rifiuta
+                              </button>
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>Audit</strong>
+                    <pre className="mt-1 max-h-40 overflow-auto font-mono text-xs">{JSON.stringify(detail.events, null, 2)}</pre>
+                  </div>
+                  <div>
+                    <strong>Consegne webhook</strong>
+                    <pre className="mt-1 max-h-32 overflow-auto font-mono text-xs">{JSON.stringify(detail.deliveries, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
+      {tab === "laboratorio" && (
+        <div className="mt-6">
+          <SandboxLab token={token} />
         </div>
-      </section>
+      )}
+
+      {tab === "config" && (
+        <div className="mt-6">
+          <ConfigDesk token={token} />
+        </div>
+      )}
     </main>
   );
 }

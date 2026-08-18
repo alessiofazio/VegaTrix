@@ -9,6 +9,7 @@ description = "SQLx PostgreSQL repositories, transactions, and outbox adapter"
 [dependencies]
 async-trait.workspace = true
 openpay-application.workspace = true
+openpay-connectors.workspace = true
 openpay-crypto.workspace = true
 openpay-domain.workspace = true
 serde.workspace = true

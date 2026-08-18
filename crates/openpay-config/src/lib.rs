@@ -341,7 +341,7 @@ mod tests {
             redis_url: "redis://localhost:6379".into(),
             jwt_access_secret: "prod_jwt_access_secret_value_32b!!".into(),
             jwt_refresh_secret: "prod_jwt_refresh_secret_value_32!!".into(),
-            encryption_master_key: "openpay-master-key-32-bytes!!ok".into(),
+            encryption_master_key: "openpay-master-key-32-bytes-ok!!".into(),
             webhook_signing_secret: "prod_webhook_signing_secret".into(),
             qr_signing_secret: "prod_qr_signing_secret!".into(),
             default_currency: "EUR".into(),
@@ -418,8 +418,7 @@ mod tests {
             Case {
                 name: "malformed encryption key",
                 mutate: |c| {
-                    c.encryption_master_key =
-                        "not-a-valid-master-key-because-wrong-size!!!".into()
+                    c.encryption_master_key = "not-a-valid-master-key-because-wrong-size!!!".into()
                 },
             },
             Case {

@@ -1,36 +1,34 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use openpay_connectors::{
     CancelPaymentAttemptInput, CancelPaymentAttemptOutput, ConnectorError,
     CreatePaymentAttemptInput, CreatePaymentAttemptOutput, GetPaymentAttemptInput,
-    NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput,
-    RefundPaymentAttemptOutput,
+    MemorySandboxStore, NormalizedAttemptStatus, PaymentConnector, RefundPaymentAttemptInput,
+    RefundPaymentAttemptOutput, SandboxAttemptStore,
 };
 use openpay_domain::{AttemptStatus, ConnectorCapabilities, ConnectorHealth, PaymentMethod};
 
-#[derive(Clone, Debug)]
-struct StoredAttempt {
-    status: AttemptStatus,
-    rail_type: String,
-}
-
 /// Sandbox connector. Scenario is taken from `input.scenario` or metadata convention:
 /// `success` | `decline` | `timeout` | `unavailable` | `duplicate` | `delayed`.
+///
+/// Attempt outcomes live in [`SandboxAttemptStore`] so server and worker share state.
 pub struct MockInstantConnector {
-    store: Arc<Mutex<HashMap<String, StoredAttempt>>>,
+    store: Arc<dyn SandboxAttemptStore>,
 }
 
 impl MockInstantConnector {
     pub fn new() -> Self {
         Self {
-            store: Arc::new(Mutex::new(HashMap::new())),
+            store: Arc::new(MemorySandboxStore::new()),
         }
+    }
+
+    pub fn with_store(store: Arc<dyn SandboxAttemptStore>) -> Self {
+        Self { store }
     }
 }
 
@@ -69,6 +67,10 @@ impl PaymentConnector for MockInstantConnector {
             "unavailable" => return Err(ConnectorError::Unavailable),
             "timeout" => {
                 tokio::time::sleep(Duration::from_millis(50)).await;
+                let provider_reference = format!("timeout_{}", input.payment_id);
+                self.store
+                    .put(self.key(), &provider_reference, AttemptStatus::Ambiguous)
+                    .await?;
                 return Err(ConnectorError::Timeout);
             }
             "decline" => return Err(ConnectorError::Declined("sandbox_declined".into())),
@@ -81,13 +83,9 @@ impl PaymentConnector for MockInstantConnector {
             "duplicate" => AttemptStatus::Settled,
             _ => AttemptStatus::Settled,
         };
-        self.store.lock().await.insert(
-            provider_reference.clone(),
-            StoredAttempt {
-                status,
-                rail_type: "MOCK_INSTANT".into(),
-            },
-        );
+        self.store
+            .put(self.key(), &provider_reference, status)
+            .await?;
         Ok(CreatePaymentAttemptOutput {
             provider_reference,
             status,
@@ -100,19 +98,30 @@ impl PaymentConnector for MockInstantConnector {
         &self,
         input: GetPaymentAttemptInput,
     ) -> Result<NormalizedAttemptStatus, ConnectorError> {
+        // Synthetic timeout_* refs from older authorize paths, and persisted Ambiguous rows.
         if input.provider_reference.starts_with("timeout_") {
             return Ok(NormalizedAttemptStatus {
                 provider_reference: input.provider_reference.clone(),
                 status: AttemptStatus::Settled,
             });
         }
-        let store = self.store.lock().await;
-        let stored = store
-            .get(&input.provider_reference)
+        let stored = self
+            .store
+            .get(self.key(), &input.provider_reference)
+            .await?
             .ok_or_else(|| ConnectorError::Message("unknown reference".into()))?;
+        let status = if stored == AttemptStatus::Processing || stored == AttemptStatus::Ambiguous {
+            let settled = AttemptStatus::Settled;
+            self.store
+                .put(self.key(), &input.provider_reference, settled)
+                .await?;
+            settled
+        } else {
+            stored
+        };
         Ok(NormalizedAttemptStatus {
             provider_reference: input.provider_reference,
-            status: stored.status,
+            status,
         })
     }
 
@@ -120,15 +129,24 @@ impl PaymentConnector for MockInstantConnector {
         &self,
         input: CancelPaymentAttemptInput,
     ) -> Result<CancelPaymentAttemptOutput, ConnectorError> {
-        let mut store = self.store.lock().await;
-        if let Some(stored) = store.get_mut(&input.provider_reference) {
-            stored.status = AttemptStatus::Cancelled;
-            Ok(CancelPaymentAttemptOutput {
+        if self
+            .store
+            .get(self.key(), &input.provider_reference)
+            .await?
+            .is_some()
+        {
+            self.store
+                .put(
+                    self.key(),
+                    &input.provider_reference,
+                    AttemptStatus::Cancelled,
+                )
+                .await?;
+            return Ok(CancelPaymentAttemptOutput {
                 status: AttemptStatus::Cancelled,
-            })
-        } else {
-            Err(ConnectorError::Message("unknown reference".into()))
+            });
         }
+        Err(ConnectorError::Message("unknown reference".into()))
     }
 
     async fn refund_attempt(
@@ -147,37 +165,48 @@ mod tests {
     use super::*;
     use openpay_domain::{AmountMinor, Currency, PaymentId, PaymentMethod};
 
+    fn input(scenario: &str, key: &str) -> CreatePaymentAttemptInput {
+        CreatePaymentAttemptInput {
+            payment_id: PaymentId::new(),
+            amount_minor: AmountMinor::new(1200).unwrap(),
+            currency: Currency::EUR,
+            method: PaymentMethod::AccountToAccount,
+            scenario: Some(scenario.into()),
+            idempotency_key: key.into(),
+        }
+    }
+
     #[tokio::test]
     async fn success_settles() {
         let c = MockInstantConnector::new();
-        let out = c
-            .create_attempt(CreatePaymentAttemptInput {
-                payment_id: PaymentId::new(),
-                amount_minor: AmountMinor::new(1200).unwrap(),
-                currency: Currency::EUR,
-                method: PaymentMethod::AccountToAccount,
-                scenario: Some("success".into()),
-                idempotency_key: "k1".into(),
-            })
-            .await
-            .unwrap();
+        let out = c.create_attempt(input("success", "k1")).await.unwrap();
         assert_eq!(out.status, AttemptStatus::Settled);
     }
 
     #[tokio::test]
     async fn decline_maps_to_error() {
         let c = MockInstantConnector::new();
-        let err = c
-            .create_attempt(CreatePaymentAttemptInput {
-                payment_id: PaymentId::new(),
-                amount_minor: AmountMinor::new(1200).unwrap(),
-                currency: Currency::EUR,
-                method: PaymentMethod::AccountToAccount,
-                scenario: Some("decline".into()),
-                idempotency_key: "k2".into(),
+        let err = c.create_attempt(input("decline", "k2")).await.unwrap_err();
+        assert_eq!(err.failure_code(), "PAYER_DECLINED");
+    }
+
+    #[tokio::test]
+    async fn delayed_and_timeout_survive_new_connector_instance() {
+        let store: Arc<dyn SandboxAttemptStore> = Arc::new(MemorySandboxStore::new());
+        let a = MockInstantConnector::with_store(store.clone());
+        let delayed = a.create_attempt(input("delayed", "k3")).await.unwrap();
+        assert_eq!(delayed.status, AttemptStatus::Processing);
+
+        let timeout_err = a.create_attempt(input("timeout", "k4")).await.unwrap_err();
+        assert_eq!(timeout_err.failure_code(), "TIMEOUT");
+
+        let b = MockInstantConnector::with_store(store);
+        let fetched = b
+            .fetch_attempt(GetPaymentAttemptInput {
+                provider_reference: delayed.provider_reference.clone(),
             })
             .await
-            .unwrap_err();
-        assert_eq!(err.failure_code(), "PAYER_DECLINED");
+            .unwrap();
+        assert_eq!(fetched.status, AttemptStatus::Settled);
     }
 }

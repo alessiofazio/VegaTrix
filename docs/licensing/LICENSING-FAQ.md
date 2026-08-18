@@ -1,13 +1,18 @@
-# Licensing FAQ (draft)
+# Licensing FAQ
 
-**NOT LEGAL ADVICE — MUST BE REVIEWED BY QUALIFIED COUNSEL BEFORE PUBLIC RELEASE.**
+OpenPay Protocol is licensed under the [Apache License 2.0](../../LICENSE).
 
-| Scenario | Community? | Commercial? |
-|---|---|---|
-| A software house uses OpenPay internally to process **its own** payments | Yes, Community, subject to the license text | Not solely for that reason |
-| A software house hosts OpenPay and gives access to **500 merchants** as a service | No | Yes |
-| A retailer runs OpenPay on **its own server** for **its own** shops | Yes | No |
-| A competitor takes the code and sells a **replacement cloud** | No | Would require a license; typically refused or separately negotiated |
-| A PSP wants a **certified connector** and support | Core study: Community; certified connector + support | Yes |
+A previous draft Sustainable Use License was superseded by Apache-2.0 at the author's request.
 
-Trademarks and “Compatible with OpenPay” badges are **not** included with the code license.
+## Common questions
+
+| Question | Answer |
+|---|---|
+| Can I self-host for my own business? | Yes, under Apache-2.0 terms. |
+| Can I modify the code? | Yes. Keep the license notice on distributions. |
+| Can I offer it as a hosted service to third parties? | Yes, under Apache-2.0 (no separate commercial license required). |
+| Can I embed it in a product I sell? | Yes, subject to Apache-2.0 attribution and NOTICE requirements. |
+| Does the license grant trademark rights? | No. “OpenPay” names and logos require separate permission. |
+| Does this software process real payments? | v1 is sandbox-only. Live rails need PSP/bank contracts and compliance work independent of the license. |
+
+This FAQ is informational, not legal advice.

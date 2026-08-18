@@ -1,16 +1,16 @@
-# Production-like stack: postgres, redis, API server, worker.
+# Production-like stack: postgres, redis, API server, worker, Caddy TLS terminator.
 # No dashboard, demo wallet, demo merchant, or auto-seed.
 #
 #   cp .env.production.example .env.production
 #   # fill real secrets, https URLs, webhook allowlist
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up --build
 #
-# Put a TLS reverse proxy in front of :8080. APP_ENV=production refuses
-# placeholder secrets, FEATURE_CONNECTOR_MOCK=true, empty WEBHOOK_URL_ALLOWLIST,
-# http:// public URLs, and --seed.
+# Caddy listens on :80 (HTTP) and :443 (HTTPS with Caddy internal CA — not a public cert).
+# APP_ENV=production refuses placeholder secrets, FEATURE_CONNECTOR_MOCK=true,
+# empty WEBHOOK_URL_ALLOWLIST, http:// public URLs, and --seed.
 #
 # Metrics: set TELEMETRY_OPT_IN=true and scrape METRICS_BIND_ADDR (default :9090).
-# See infra/prometheus/alerts.yml.
+# See infra/prometheus/alerts.yml and infra/caddy/README.md.
 
 services:
   postgres:
@@ -49,6 +49,7 @@ services:
       REDIS_URL: redis://redis:6379
       BIND_ADDR: 0.0.0.0:8080
     # Image entrypoint is openpay-server with no --seed (rejected in production anyway).
+    # Direct HTTP is still mapped for debug; prefer Caddy :443.
     ports:
       - "8080:8080"
     healthcheck:
@@ -74,6 +75,12 @@ services:
       FEATURE_CONNECTOR_MOCK: "false"
       DATABASE_URL: postgresql://${POSTGRES_USER:-openpay}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openpay}
       REDIS_URL: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/readyz"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+      start_period: 25s
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,5 +88,21 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata_prod:
+  caddy_data:
+  caddy_config:

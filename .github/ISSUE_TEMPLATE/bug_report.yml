@@ -1,0 +1,37 @@
+name: Bug report
+description: Report incorrect behavior in the sandbox
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        v1 is sandbox software — do not report issues involving real payment credentials.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Docker Compose, OS, and commands you ran.
+      placeholder: |
+        1. docker compose up --build
+        2. Open http://localhost:3002
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or tag
+      placeholder: main @ abc1234
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell

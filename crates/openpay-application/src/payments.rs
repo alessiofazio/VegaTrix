@@ -67,6 +67,7 @@ pub struct CreatedPaymentView {
     pub payment_url: String,
     pub qr_payload: String,
     pub qr_svg: String,
+    pub qr_token: String,
 }
 
 impl<P, M, A, O, R, C, K, Cl> PaymentService<P, M, A, O, R, C, K, Cl>
@@ -146,7 +147,7 @@ where
             )
             .await?;
 
-        Ok(self.present(&payment, replayed)?)
+        self.present(&payment, replayed)
     }
 
     pub async fn get_payment(
@@ -312,6 +313,7 @@ where
             payment_url,
             qr_payload,
             qr_svg,
+            qr_token: token,
         })
     }
 }
